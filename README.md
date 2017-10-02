@@ -2,4 +2,5 @@
 
 ## Group Members:
 - Taras Basiuk
+- Timo Kaufmann
 
