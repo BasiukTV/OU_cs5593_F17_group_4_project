@@ -3,4 +3,5 @@
 ## Group Members:
 - Taras Basiuk
 - Timo Kaufmann
+- Redae Beraki
 
