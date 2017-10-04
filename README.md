@@ -4,4 +4,4 @@
 - Taras Basiuk
 - Timo Kaufmann
 - Redae Beraki
-
+- Jasmine DeHart
