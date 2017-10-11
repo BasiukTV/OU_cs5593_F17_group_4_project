@@ -3,9 +3,6 @@ import json, multiprocessing
 DEFAULT_INPUT_DIRECTORY = "../../samples/data/raw/";
 DEFAULT_THREADS_NUMBER = 5;
 
-def pretty_print(obj):
-    print(json.dumps(obj, sort_keys=True, indent=4, separators=(",", ": ")))
-
 def process_day(month_and_day):
     (month, day) = month_and_day
     starcount = 0
