@@ -34,10 +34,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Script for parsing input GitHub logs into application specific dataset.")
     parser.add_argument("-dir", "--directory", help="Input logs file directory.")
     parser.add_argument("-t", "--threads", help="Number of threads to use for processing.", default=DEFAULT_THREADS_NUMBER)
-    parser.add_argument("-y", "--year", help="Year of input data to process.")
-    parser.add_argument("-m", "--month", help="Month of input data to process.")
-    parser.add_argument("-d", "--day", help="Day of input data to process.")
-    parser.add_argument("-hr", "--hour", help="hour of input data to process.")
+    parser.add_argument("-y", "--year", help="Year of input data to process. In YYYY format.")
+    parser.add_argument("-m", "--month", help="Month of input data to process. In MM format.")
+    parser.add_argument("-d", "--day", help="Day of input data to process. In DD format.")
+    parser.add_argument("-hr", "--hour", help="Hour of input data to process. In HH format.")
     args = parser.parse_args()
 
     print("Pre-processing started.")
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     from utils.file_utils import discover_directory_files
     input_files = discover_directory_files(app_data_dir, filename_pattern=filename_pattern)
-    print("Discovered Folowing Input Data Files: {}".format(input_files))
+    print("Discovered Following Input Data Files: {}".format(input_files))
 
     pool = multiprocessing.Pool(int(args.threads))
     for month in range(1,4):
