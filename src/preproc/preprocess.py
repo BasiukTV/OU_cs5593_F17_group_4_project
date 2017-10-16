@@ -54,10 +54,6 @@ def process_file(path_to_file_and_database):
 
     print("{} new stars on {}".format(starcount, path_to_file))
 
-
-def process_month(month):
-    out = pool.map(process_day, zip([month] * 31, range(1,32)))
-
 # Entry point for running pre-processing step separately
 if __name__ == "__main__":
     import argparse, os, sys
