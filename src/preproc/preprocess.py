@@ -4,23 +4,55 @@ DEFAULT_INPUT_DIRECTORY = "/samples/data/raw"; # Relative to home directory of t
 DEFAULT_FILENAME_PATTERN = "YYYY-MM-DD-HH*.json"; # Tail wildcard is for labels ("-sample" for example)
 DEFAULT_THREADS_NUMBER = 5;
 
-def process_day(month_and_day):
-    (month, day) = month_and_day
-    starcount = 0
-    for hour in range (0,24):
-        filename = "/scratch/timo/github/2016-{:02}-{:02}-{}.json".format(month, day, hour)
-        try:
-            with open(filename) as json_file:
-                for line in json_file:
-                    obj = json.loads(line)
-                    t = obj["type"]
-                    if t == "WatchEvent":
-                        starcount += 1
-        except IOError as er:
-            print(er)
-            pass
+# Process files in one week of worth data batches. Assuming one file holds an hour worth of data.
+DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
 
-    print("{} new stars on 2017-{:02}-{:02}".format(starcount, month, day))
+def preprocess_files(files, threads_num):
+    """This preprocesses given list of log files, using given number of threads."""
+
+    # Initialize main database. TODO This is part of issue #11
+    main_database = None
+
+    # Determine size of a batch and number of batch tuns required to process all files
+    batch_size = DEFAULT_FILE_PREPROCESSING_BATCH_SIZE
+    batch_runs = 1 + (len(files) // batch_size)
+    print("Preprocessing will take {} run(s), each processing a batch of up to {} file(s).".format(batch_runs, batch_size))
+
+    # Initialize the thread pool
+    thread_pool = multiprocessing.Pool(threads_num)
+
+    # Loop which processes separate batches of input files
+    for batch_run in range(1, batch_runs + 1):
+        print("Starting run #{}".format(batch_run))
+
+        starting_file_index = batch_size * (batch_run - 1)
+        files_to_process = batch_size if batch_run != batch_runs else len(files) - starting_file_index
+        print("This run will process {} files.".format(files_to_process))
+
+        # Intialize the intermidiate_database TODO This is part of issue #6
+        intermidiate_database = None
+
+        thread_pool.map(process_file, zip(files[starting_file_index : starting_file_index + files_to_process], [intermidiate_database] * files_to_process))
+        # TODO Merge Intermediate and Main Database here. This is part of issue #6
+
+    # TODO Deserialize main database into output directory. This is part of issue #11
+
+def process_file(path_to_file_and_database):
+    (path_to_file, database) = path_to_file_and_database
+    starcount = 0
+
+    try:
+        with open(path_to_file, encoding="utf8") as json_file:
+            for line in json_file:
+                obj = json.loads(line)
+                t = obj["type"]
+                if t == "WatchEvent":
+                    starcount += 1
+    except IOError as er:
+        print(er)
+        pass
+
+    print("{} new stars on {}".format(starcount, path_to_file))
 
 
 def process_month(month):
@@ -67,6 +99,4 @@ if __name__ == "__main__":
     input_files = discover_directory_files(app_data_dir, filename_pattern=filename_pattern)
     print("Discovered Following Input Data Files: {}".format(input_files))
 
-    pool = multiprocessing.Pool(int(args.threads))
-    for month in range(1,4):
-        process_month(month)
+    preprocess_files(input_files, int(args.threads))
