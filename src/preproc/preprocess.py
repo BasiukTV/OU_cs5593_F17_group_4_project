@@ -1,17 +1,48 @@
-import json, multiprocessing
+import json
+import multiprocessing
+import sqlite3
 
 DEFAULT_INPUT_DIRECTORY = "/samples/data/raw"; # Relative to home directory of the application
 DEFAULT_FILENAME_PATTERN = "YYYY-MM-DD-HH*.json"; # Tail wildcard is for labels ("-sample" for example)
 DEFAULT_THREADS_NUMBER = 5;
+DB_PATH = 'database.db'; # TODO proper file path
 
 # Process files in one week of worth data batches. Assuming one file holds an hour worth of data.
 DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
 
+def setup_db_scheme(cur):
+    cur.execute('''
+        CREATE TABLE starrings (
+            event_id primary key,
+            repo_id number,
+            time text,
+            actor_id number
+        )
+    ''')
+    cur.execute("CREATE TABLE repos (repo_id number primary key, number_of_stars number)")
+
+def aggregate_data(cur):
+    for (repoid,) in cur.execute("select repo_id from starrings"):
+        # TODO only gets executed for one repo for some reason
+        cur.execute("SELECT count(*) FROM starrings WHERE repo_id = ?", (str(repoid),))
+        stars = cur.fetchone()[0]
+
+        # DEBUG
+        # print("Repo {} has {} stars", repoid, stars)
+        cur.execute("INSERT INTO repos VALUES (?, ?)", (repoid, stars))
+
 def preprocess_files(files, threads_num):
     """This preprocesses given list of log files, using given number of threads."""
 
-    # Initialize main database. TODO This is part of issue #11
-    main_database = None
+    # Initialize main database.
+    # TODO should we be able to update an existing db?
+    try:
+        os.remove(DB_PATH)
+    except:
+        pass
+    db = sqlite3.connect(DB_PATH)
+    cur = db.cursor()
+    setup_db_scheme(cur);
 
     # Determine size of a batch and number of batch tuns required to process all files
     batch_size = DEFAULT_FILE_PREPROCESSING_BATCH_SIZE
@@ -29,30 +60,45 @@ def preprocess_files(files, threads_num):
         files_to_process = batch_size if batch_run != batch_runs else len(files) - starting_file_index
         print("This run will process {} files.".format(files_to_process))
 
-        # Intialize the intermidiate_database TODO This is part of issue #6
-        intermidiate_database = None
+        thread_pool.map(
+                process_file, # execute process_file
+                zip(
+                    files[starting_file_index : starting_file_index + files_to_process], # on these files
+                    [DB_PATH] * files_to_process) # with that database
+                )
 
-        thread_pool.map(process_file, zip(files[starting_file_index : starting_file_index + files_to_process], [intermidiate_database] * files_to_process))
-        # TODO Merge Intermediate and Main Database here. This is part of issue #6
+    aggregate_data(cur)
+    # DEBUG
+    for row in cur.execute('SELECT * FROM repos'):
+        print(row)
 
+    db.commit()
+    db.close()
     # TODO Deserialize main database into output directory. This is part of issue #11
 
 def process_file(path_to_file_and_database):
-    (path_to_file, database) = path_to_file_and_database
-    starcount = 0
+    (path_to_file, path_to_database) = path_to_file_and_database
+    db = sqlite3.connect(path_to_database)
+    cur = db.cursor()
+    print("Processing {}".format(path_to_file))
 
     try:
-        with open(path_to_file, encoding="utf8") as json_file:
+        with open(path_to_file) as json_file:
             for line in json_file:
                 obj = json.loads(line)
-                t = obj["type"]
-                if t == "WatchEvent":
-                    starcount += 1
+                event_type = obj["type"]
+                event_id = obj["id"]
+                event_time = obj["created_at"]
+                actor_id = obj["actor"]["id"]
+
+                if event_type == "WatchEvent":
+                    repo_id = obj["repo"]["id"]
+                    cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", (event_id, repo_id, event_time, actor_id))
     except IOError as er:
         print(er)
         pass
-
-    print("{} new stars on {}".format(starcount, path_to_file))
+    db.commit()
+    db.close()
 
 # Entry point for running pre-processing step separately
 if __name__ == "__main__":
