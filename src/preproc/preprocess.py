@@ -258,7 +258,6 @@ if __name__ == "__main__":
     print("Discovered Following Input Data Files: {}".format(input_files))
 
     app_data_outdir = args.outdir if args.outdir else os.path.realpath(app_home_dir + DEFAULT_OUTPUT_DIRECTORY);
-    os.mkdir(app_data_outdir)
     print("Application preprocessed dataset directory will be: {}".format(app_data_outdir))
 
     output_filename = DEFAULT_OUTPUT_FILENAME_PATTERN
