@@ -2,6 +2,7 @@ from __future__ import print_function
 import json
 import multiprocessing
 import sqlite3
+import io
 from time import gmtime, strftime
 
 DEFAULT_INPUT_DIRECTORY = "/samples/data/raw"; # Relative to home directory of the application
@@ -143,7 +144,7 @@ def process_file(path_to_file_and_database):
     print("{}: Processing {}".format(now(), path_to_file))
 
     try:
-        with open(path_to_file, encoding="utf8") as json_file:
+        with io.open(path_to_file, encoding="utf8") as json_file:
             for lineno, line in enumerate(json_file):
                 try:
                     obj = json.loads(line)
