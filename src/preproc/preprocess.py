@@ -1,6 +1,7 @@
 import json
 import multiprocessing
 import sqlite3
+from time import gmtime, strftime
 
 DEFAULT_INPUT_DIRECTORY = "/samples/data/raw"; # Relative to home directory of the application
 DEFAULT_FILENAME_PATTERN = "YYYY-MM-DD-HH*.json"; # Tail wildcard is for labels ("-sample" for example)
@@ -10,7 +11,11 @@ DB_PATH = 'database.db'; # TODO proper file path
 # Process files in one week of worth data batches. Assuming one file holds an hour worth of data.
 DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
 
+def now():
+    return strftime("%Y-%m-%d %H:%M:%S", gmtime())
+
 def setup_db_scheme(cur):
+    print("{}: setting up db scheme".format(now()))
     # TODO: instead of repeating the same attributes again and again, we could create a sperate "event" table.
     # I'm not sure aobut the performance implications though: Basically every action would require a join.
     common_attrs = '''
@@ -68,6 +73,7 @@ def setup_db_scheme(cur):
     ''')
 
 def aggregate_data(con):
+    print("{}: aggregating data".format(now()))
     cur1 = con.cursor()
     cur2 = con.cursor()
     for row in cur1.execute("SELECT DISTINCT repo_id FROM starrings"):
@@ -79,6 +85,7 @@ def aggregate_data(con):
 
 def preprocess_files(files, threads_num):
     """This preprocesses given list of log files, using given number of threads."""
+    print("{}: preprocessing files".format(now()))
 
     # Initialize main database.
     # TODO should we be able to update an existing db?
@@ -93,18 +100,18 @@ def preprocess_files(files, threads_num):
     # Determine size of a batch and number of batch tuns required to process all files
     batch_size = DEFAULT_FILE_PREPROCESSING_BATCH_SIZE
     batch_runs = 1 + (len(files) // batch_size)
-    print("Preprocessing will take {} run(s), each processing a batch of up to {} file(s).".format(batch_runs, batch_size))
+    print("{}: Preprocessing will take {} run(s), each processing a batch of up to {} file(s).".format(now(), batch_runs, batch_size))
 
     # Initialize the thread pool
     thread_pool = multiprocessing.Pool(threads_num)
 
     # Loop which processes separate batches of input files
     for batch_run in range(1, batch_runs + 1):
-        print("Starting run #{}".format(batch_run))
+        print("{}: Starting run #{}".format(now(), batch_run))
 
         starting_file_index = batch_size * (batch_run - 1)
         files_to_process = batch_size if batch_run != batch_runs else len(files) - starting_file_index
-        print("This run will process {} files.".format(files_to_process))
+        print("{}: This run will process {} files.".format(now(), files_to_process))
 
         thread_pool.map(
                 process_file, # execute process_file
@@ -126,7 +133,7 @@ def process_file(path_to_file_and_database):
     (path_to_file, path_to_database) = path_to_file_and_database
     db = sqlite3.connect(path_to_database)
     cur = db.cursor()
-    print("Processing {}".format(path_to_file))
+    print("{}: Processing {}".format(now(), path_to_file))
 
     try:
         with open(path_to_file) as json_file:
