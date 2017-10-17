@@ -21,15 +21,15 @@ def setup_db_scheme(cur):
     ''')
     cur.execute("CREATE TABLE repos (repo_id number primary key, number_of_stars number)")
 
-def aggregate_data(cur):
-    for (repoid,) in cur.execute("select repo_id from starrings"):
-        # TODO only gets executed for one repo for some reason
-        cur.execute("SELECT count(*) FROM starrings WHERE repo_id = ?", (str(repoid),))
-        stars = cur.fetchone()[0]
+def aggregate_data(con):
+    cur1 = con.cursor()
+    cur2 = con.cursor()
+    for row in cur1.execute("SELECT DISTINCT repo_id FROM starrings"):
+        repoid = row[0]
+        cur2.execute("SELECT count(*) FROM starrings WHERE repo_id = ?", (str(repoid),))
+        stars = cur2.fetchone()[0]
 
-        # DEBUG
-        # print("Repo {} has {} stars", repoid, stars)
-        cur.execute("INSERT INTO repos VALUES (?, ?)", (repoid, stars))
+        cur2.execute("INSERT INTO repos VALUES (?, ?)", (repoid, stars))
 
 def preprocess_files(files, threads_num):
     """This preprocesses given list of log files, using given number of threads."""
@@ -40,8 +40,8 @@ def preprocess_files(files, threads_num):
         os.remove(DB_PATH)
     except:
         pass
-    db = sqlite3.connect(DB_PATH)
-    cur = db.cursor()
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
     setup_db_scheme(cur);
 
     # Determine size of a batch and number of batch tuns required to process all files
@@ -67,13 +67,13 @@ def preprocess_files(files, threads_num):
                     [DB_PATH] * files_to_process) # with that database
                 )
 
-    aggregate_data(cur)
+    aggregate_data(con)
     # DEBUG
     for row in cur.execute('SELECT * FROM repos'):
         print(row)
 
-    db.commit()
-    db.close()
+    con.commit()
+    con.close()
     # TODO Deserialize main database into output directory. This is part of issue #11
 
 def process_file(path_to_file_and_database):
