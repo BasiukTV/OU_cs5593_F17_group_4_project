@@ -152,7 +152,9 @@ def process_file(path_to_file_and_database):
                     event_type = obj.get("type")
                     event_id = obj.get("id") # not all events have ids, can be None
                     event_time = obj.get("created_at")
-                    actor_id = obj.get("actor", {}).get("id")
+                    actor = obj.get("actor", {})
+                    # old records store just the name of the actor with a seperate actor_attributes field (which doesn't contain the id either)
+                    actor_id = actor.get("id") if isinstance(actor, dict) else None
                     repo_id = obj.get("repo", {}).get("id") # can be None
                     payload = obj.get("payload", {})
                     std = (None, event_id, repo_id, event_time, actor_id) # relevant attributes every event has
