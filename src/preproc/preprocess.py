@@ -141,62 +141,66 @@ def process_file(path_to_file_and_database):
     try:
         with open(path_to_file) as json_file:
             for lineno, line in enumerate(json_file):
-                obj = json.loads(line)
-                event_type = obj.get("type")
-                event_id = obj.get("id") # not all events have ids, can be None
-                event_time = obj.get("created_at")
-                actor_id = obj.get("actor", {}).get("id")
-                repo_id = obj.get("repo", {}).get("id") # can be None
-                payload = obj.get("payload", {})
-                std = (None, event_id, repo_id, event_time, actor_id) # relevant attributes every event has
+                try:
+                    obj = json.loads(line)
+                    event_type = obj.get("type")
+                    event_id = obj.get("id") # not all events have ids, can be None
+                    event_time = obj.get("created_at")
+                    actor_id = obj.get("actor", {}).get("id")
+                    repo_id = obj.get("repo", {}).get("id") # can be None
+                    payload = obj.get("payload", {})
+                    std = (None, event_id, repo_id, event_time, actor_id) # relevant attributes every event has
 
-                if event_type == "WatchEvent":
-                    cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?)", std)
-                elif event_type == "CreateEvent":
-                    # TODO handle old CreateEvents without description
-                    # TODO and without pusher_type
-                    description = payload.get("description") # can be None
-                    description_len = None if description is None else len(description)
-                    cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?, ?)", std + (description_len, payload.get("pusher_type")))
-                elif event_type == "PushEvent":
-                    cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?)", std)
-                    for commit in payload.get("commits", []): # TODO handle alternative 2011 format (shas instead of commits?)
-                        # TODO handle without distinct
-                        cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit.get("distinct", True)))
-                elif event_type == "ReleaseEvent":
-                    release = payload["release"]
-                    cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (release.get("tag_name"), release.get("name"), release.get("prerelease"), len(release.get("assets"))))
-                elif event_type == "PullRequestEvent":
-                    pr = payload.get("pull_request")
-                    a = payload.get("action")
-                    # TODO consider `locked` attribute
-                    if a == "assigned":
-                        pass # TODO
-                    elif a == "unassigned":
-                        pass # TODO
-                    elif a == "review_requested":
-                        pass # TODO
-                    elif a == "review_request_removed":
-                        pass # TODO
-                    elif a == "labeled":
-                        pass # TODO
-                    elif a == "unlabeled":
-                        pass # TODO
-                    elif a == "opened":
-                        body = payload.get("body") # can be None
-                        body_len = None if body is None else len(body)
-                        cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?)", std + (pr.get("title") , body_len))
-                    elif a == "edited":
-                        pass # TODO
-                    elif a == "closed":
-                        if pr.get("merged", True): # TODO handle old events without merged
-                            pass # pr merged # TODO
-                        else:
-                            pass # pr discarded # TODO
-                    elif a == "reopened":
-                        pass # TODO
-                    elif a == "edited":
-                        pass # TODO
+                    if event_type == "WatchEvent":
+                        cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?)", std)
+                    elif event_type == "CreateEvent":
+                        # TODO handle old CreateEvents without description
+                        # TODO and without pusher_type
+                        description = payload.get("description") # can be None
+                        description_len = None if description is None else len(description)
+                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?, ?)", std + (description_len, payload.get("pusher_type")))
+                    elif event_type == "PushEvent":
+                        cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?)", std)
+                        for commit in payload.get("commits", []): # TODO handle alternative 2011 format (shas instead of commits?)
+                            # TODO handle without distinct
+                            cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit.get("distinct", True)))
+                    elif event_type == "ReleaseEvent":
+                        release = payload["release"]
+                        cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (release.get("tag_name"), release.get("name"), release.get("prerelease"), len(release.get("assets"))))
+                    elif event_type == "PullRequestEvent":
+                        pr = payload.get("pull_request")
+                        a = payload.get("action")
+                        # TODO consider `locked` attribute
+                        if a == "assigned":
+                            pass # TODO
+                        elif a == "unassigned":
+                            pass # TODO
+                        elif a == "review_requested":
+                            pass # TODO
+                        elif a == "review_request_removed":
+                            pass # TODO
+                        elif a == "labeled":
+                            pass # TODO
+                        elif a == "unlabeled":
+                            pass # TODO
+                        elif a == "opened":
+                            body = payload.get("body") # can be None
+                            body_len = None if body is None else len(body)
+                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?)", std + (pr.get("title") , body_len))
+                        elif a == "edited":
+                            pass # TODO
+                        elif a == "closed":
+                            if pr.get("merged", True): # TODO handle old events without merged
+                                pass # pr merged # TODO
+                            else:
+                                pass # pr discarded # TODO
+                        elif a == "reopened":
+                            pass # TODO
+                        elif a == "edited":
+                            pass # TODO
+                except Exception as e: 
+                    from sys import stderr
+                    print("{}: Error while processing line {} of {}:\n{}".format(now(),lineno, path_to_file, e), file=stderr)
     except IOError as er:
         print(er)
         pass
