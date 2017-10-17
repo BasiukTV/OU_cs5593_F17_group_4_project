@@ -19,7 +19,8 @@ def setup_db_scheme(cur):
     # TODO: instead of repeating the same attributes again and again, we could create a sperate "event" table.
     # I'm not sure aobut the performance implications though: Basically every action would require a join.
     common_attrs = '''
-        event_id primary key,
+        id integer primary key autoincrement,
+        event_id number,
         repo_id number,
         time text,
         actor_id number
@@ -46,8 +47,7 @@ def setup_db_scheme(cur):
             event_id number,
             author_name text,
             message text,
-            distinct_ bool,
-            FOREIGN KEY (event_id) REFERENCES pushes
+            distinct_ bool
         )
     ''')
     cur.execute('''
@@ -140,64 +140,62 @@ def process_file(path_to_file_and_database):
 
     try:
         with open(path_to_file) as json_file:
-            for line in json_file:
+            for lineno, line in enumerate(json_file):
                 obj = json.loads(line)
                 try:
                     event_type = obj["type"]
-                    event_id = obj["id"]
-                    try:
-                        event_time = obj["created_at"]
-                        actor_id = obj["actor"]["id"]
-                        repo_id = obj["repo"].get("id", -1) # TODO handle old events without repo ids
-                        payload = obj["payload"]
-                        std = (event_id, repo_id, event_time, actor_id) # relevant attributes every event has
+                    event_id = obj.get("id", -1) # TODO not all events have ids
+                    event_time = obj["created_at"]
+                    actor_id = obj["actor"]["id"]
+                    repo_id = obj["repo"].get("id", -1) # TODO handle old events without repo ids
+                    payload = obj["payload"]
+                    std = (None, event_id, repo_id, event_time, actor_id) # relevant attributes every event has
 
-                        if event_type == "WatchEvent":
-                            cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", std)
-                        elif event_type == "CreateEvent":
-                            # TODO handle old CreateEvents without description
-                            # TODO and without pusher_type
-                            cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload.get("description", "") or ""), payload.get("pusher_type", "")))
-                        elif event_type == "PushEvent":
-                            cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std)
-                            for commit in payload.get("commits", []): # TODO handle alternative 2011 format (shas instead of commits?)
-                                cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit["distinct"]))
-                        elif event_type == "ReleaseEvent":
-                            release = payload["release"]
-                            cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (release["tag_name"], release["name"], release["prerelease"], len(release["assets"])))
-                        elif event_type == "PullRequestEvent":
-                            pr = payload["pull_request"]
-                            a = payload["action"]
-                            # TODO consider `locked` attribute
-                            if a == "assigned":
-                                pass # TODO
-                            elif a == "unassigned":
-                                pass # TODO
-                            elif a == "review_requested":
-                                pass # TODO
-                            elif a == "review_request_removed":
-                                pass # TODO
-                            elif a == "labeled":
-                                pass # TODO
-                            elif a == "unlabeled":
-                                pass # TODO
-                            elif a == "opened":
-                                cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr.get("body", "") or ""))) # TODO handle old events without body
-                            elif a == "edited":
-                                pass # TODO
-                            elif a == "closed":
-                                if pr.get("merged", True): # TODO handle old events without merged
-                                    pass # pr merged # TODO
-                                else:
-                                    pass # pr discarded # TODO
-                            elif a == "reopened":
-                                pass # TODO
-                            elif a == "edited":
-                                pass # TODO
-                    except KeyError as er:
-                        print("{}: Found {} without key {} in event {}".format(path_to_file, event_type, er, event_id))
+                    if event_type == "WatchEvent":
+                        cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?)", std)
+                    elif event_type == "CreateEvent":
+                        # TODO handle old CreateEvents without description
+                        # TODO and without pusher_type
+                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?, ?)", std + (len(payload.get("description", "") or ""), payload.get("pusher_type", "")))
+                    elif event_type == "PushEvent":
+                        cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?)", std)
+                        for commit in payload.get("commits", []): # TODO handle alternative 2011 format (shas instead of commits?)
+                            # TODO handle without distinct
+                            cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit.get("distinct", True)))
+                    elif event_type == "ReleaseEvent":
+                        release = payload["release"]
+                        cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (release["tag_name"], release["name"], release["prerelease"], len(release["assets"])))
+                    elif event_type == "PullRequestEvent":
+                        pr = payload["pull_request"]
+                        a = payload["action"]
+                        # TODO consider `locked` attribute
+                        if a == "assigned":
+                            pass # TODO
+                        elif a == "unassigned":
+                            pass # TODO
+                        elif a == "review_requested":
+                            pass # TODO
+                        elif a == "review_request_removed":
+                            pass # TODO
+                        elif a == "labeled":
+                            pass # TODO
+                        elif a == "unlabeled":
+                            pass # TODO
+                        elif a == "opened":
+                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr.get("body", "") or ""))) # TODO handle old events without body
+                        elif a == "edited":
+                            pass # TODO
+                        elif a == "closed":
+                            if pr.get("merged", True): # TODO handle old events without merged
+                                pass # pr merged # TODO
+                            else:
+                                pass # pr discarded # TODO
+                        elif a == "reopened":
+                            pass # TODO
+                        elif a == "edited":
+                            pass # TODO
                 except KeyError as er:
-                    print("{}: The event does not even have {}, its hopeless:\n{}".format(path_to_file, er, obj))
+                    print("{}-l{}: Found {} without key {} in event {}".format(path_to_file, lineno, event_type, er, event_id))
     except IOError as er:
         print(er)
         pass
