@@ -45,6 +45,15 @@ def setup_db_scheme(cur):
             FOREIGN KEY (event_id) REFERENCES pushes
         )
     ''')
+    cur.execute('''
+        CREATE TABLE releases (
+            {},
+            tag_name text,
+            name text,
+            prerelease bool,
+            num_assets number
+        )
+    '''.format(common_attrs))
     cur.execute('''CREATE TABLE repos (
         repo_id number PRIMARY KEY,
         number_of_stars number
@@ -129,9 +138,12 @@ def process_file(path_to_file_and_database):
                 elif event_type == "CreateEvent":
                     cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload["description"] or ""), payload["pusher_type"]))
                 elif event_type == "PushEvent":
-                    cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std )
+                    cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std)
                     for commit in payload["commits"]:
                         cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit["distinct"]))
+                elif event_type == "ReleaseEvent":
+                    release = payload["release"]
+                    cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (release["tag_name"], release["name"], release["prerelease"], len(release["assets"])))
     except IOError as er:
         print(er)
         pass
