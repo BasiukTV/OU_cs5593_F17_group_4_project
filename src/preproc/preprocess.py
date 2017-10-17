@@ -11,14 +11,26 @@ DB_PATH = 'database.db'; # TODO proper file path
 DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
 
 def setup_db_scheme(cur):
+    # TODO: instead of repeating the same attributes again and again, we could create a sperate "event" table.
+    # I'm not sure aobut the performance implications though: Basically every action would require a join.
+    common_attrs = '''
+        event_id primary key,
+        repo_id number,
+        time text,
+        actor_id number
+    '''
     cur.execute('''
         CREATE TABLE starrings (
-            event_id primary key,
-            repo_id number,
-            time text,
-            actor_id number
+            {}
         )
-    ''')
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE creations (
+            {},
+            description_len number,
+            pusher_type text
+        )
+    '''.format(common_attrs))
     cur.execute("CREATE TABLE repos (repo_id number primary key, number_of_stars number)")
 
 def aggregate_data(con):
@@ -90,10 +102,14 @@ def process_file(path_to_file_and_database):
                 event_id = obj["id"]
                 event_time = obj["created_at"]
                 actor_id = obj["actor"]["id"]
+                repo_id = obj["repo"]["id"]
+                payload = obj["payload"]
+                std = (event_id, repo_id, event_time, actor_id) # relevant attributes every event has
 
                 if event_type == "WatchEvent":
-                    repo_id = obj["repo"]["id"]
-                    cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", (event_id, repo_id, event_time, actor_id))
+                    cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", std)
+                elif event_type == "CreateEvent":
+                    cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload["description"] or ""), payload["pusher_type"]))
     except IOError as er:
         print(er)
         pass
