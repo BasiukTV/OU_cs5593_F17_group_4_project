@@ -139,22 +139,23 @@ def process_file(path_to_file_and_database):
         with open(path_to_file) as json_file:
             for line in json_file:
                 obj = json.loads(line)
+                event_type = obj["type"]
+                event_id = obj["id"]
                 try:
-                    event_type = obj["type"]
-                    event_id = obj["id"]
                     event_time = obj["created_at"]
                     actor_id = obj["actor"]["id"]
-                    repo_id = obj["repo"]["id"]
+                    repo_id = obj["repo"].get("id", -1) # TODO handle old events without repo ids
                     payload = obj["payload"]
                     std = (event_id, repo_id, event_time, actor_id) # relevant attributes every event has
 
                     if event_type == "WatchEvent":
                         cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", std)
                     elif event_type == "CreateEvent":
-                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload["description"] or ""), payload["pusher_type"]))
+                        # TODO handle old CreateEvents without description
+                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload.get("description", "") or ""), payload["pusher_type"]))
                     elif event_type == "PushEvent":
                         cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std)
-                        for commit in payload["commits"]:
+                        for commit in payload.get("commits", []): # TODO handle alternative 2011 format (shas instead of commits?)
                             cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit["distinct"]))
                     elif event_type == "ReleaseEvent":
                         release = payload["release"]
@@ -176,11 +177,11 @@ def process_file(path_to_file_and_database):
                         elif a == "unlabeled":
                             pass # TODO
                         elif a == "opened":
-                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr["body"] or "")))
+                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr("body", "") or ""))) # TODO handle old events without body
                         elif a == "edited":
                             pass # TODO
                         elif a == "closed":
-                            if pr["merged"]:
+                            if pr.get("merged", True): # TODO handle old events without merged
                                 pass # pr merged # TODO
                             else:
                                 pass # pr discarded # TODO
@@ -189,7 +190,7 @@ def process_file(path_to_file_and_database):
                         elif a == "edited":
                             pass # TODO
                 except KeyError as er:
-                    print("Missing key {} in object\n{}".format(er, obj))
+                    print("{}: Found {} without key {} in event {}\n{}".format(path_to_file, event_type, er, event_id))
     except IOError as er:
         print(er)
         pass
