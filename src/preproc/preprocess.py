@@ -1,4 +1,7 @@
-import json, multiprocessing, sqlite3
+from __future__ import print_function
+import json
+import multiprocessing
+import sqlite3
 from time import gmtime, strftime
 
 DEFAULT_INPUT_DIRECTORY = "/samples/data/raw"; # Relative to home directory of the application
