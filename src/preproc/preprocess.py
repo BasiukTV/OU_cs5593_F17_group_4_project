@@ -31,7 +31,25 @@ def setup_db_scheme(cur):
             pusher_type text
         )
     '''.format(common_attrs))
-    cur.execute("CREATE TABLE repos (repo_id number primary key, number_of_stars number)")
+    cur.execute('''
+        CREATE TABLE pushes (
+            {}
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE commits (
+            event_id number,
+            author_name text,
+            message text,
+            distinct_ bool,
+            FOREIGN KEY (event_id) REFERENCES pushes
+        )
+    ''')
+    cur.execute('''CREATE TABLE repos (
+        repo_id number PRIMARY KEY,
+        number_of_stars number
+        )
+    ''')
 
 def aggregate_data(con):
     cur1 = con.cursor()
@@ -110,6 +128,10 @@ def process_file(path_to_file_and_database):
                     cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", std)
                 elif event_type == "CreateEvent":
                     cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload["description"] or ""), payload["pusher_type"]))
+                elif event_type == "PushEvent":
+                    cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std )
+                    for commit in payload["commits"]:
+                        cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit["distinct"]))
     except IOError as er:
         print(er)
         pass
