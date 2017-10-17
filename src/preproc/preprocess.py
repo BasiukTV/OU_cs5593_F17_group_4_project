@@ -54,6 +54,13 @@ def setup_db_scheme(cur):
             num_assets number
         )
     '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE pr_opens (
+            {},
+            title text,
+            body_len number
+        )
+    '''.format(common_attrs))
     cur.execute('''CREATE TABLE repos (
         repo_id number PRIMARY KEY,
         number_of_stars number
@@ -108,8 +115,8 @@ def preprocess_files(files, threads_num):
 
     aggregate_data(con)
     # DEBUG
-    for row in cur.execute('SELECT * FROM repos'):
-        print(row)
+    # for row in cur.execute('SELECT * FROM repos'):
+    #     print(row)
 
     con.commit()
     con.close()
@@ -144,6 +151,35 @@ def process_file(path_to_file_and_database):
                 elif event_type == "ReleaseEvent":
                     release = payload["release"]
                     cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (release["tag_name"], release["name"], release["prerelease"], len(release["assets"])))
+                elif event_type == "PullRequestEvent":
+                    pr = payload["pull_request"]
+                    a = payload["action"]
+                    # TODO consider `locked` attribute
+                    if a == "assigned":
+                        pass # TODO
+                    elif a == "unassigned":
+                        pass # TODO
+                    elif a == "review_requested":
+                        pass # TODO
+                    elif a == "review_request_removed":
+                        pass # TODO
+                    elif a == "labeled":
+                        pass # TODO
+                    elif a == "unlabeled":
+                        pass # TODO
+                    elif a == "opened":
+                        cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr["body"] or "")))
+                    elif a == "edited":
+                        pass # TODO
+                    elif a == "closed":
+                        if pr["merged"]:
+                            pass # pr merged # TODO
+                        else:
+                            pass # pr discarded # TODO
+                    elif a == "reopened":
+                        pass # TODO
+                    elif a == "edited":
+                        pass # TODO
     except IOError as er:
         print(er)
         pass
