@@ -155,7 +155,8 @@ def process_file(path_to_file_and_database):
                         cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", std)
                     elif event_type == "CreateEvent":
                         # TODO handle old CreateEvents without description
-                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload.get("description", "") or ""), payload["pusher_type"]))
+                        # TODO and without pusher_type
+                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload.get("description", "") or ""), payload.get("pusher_type", "")))
                     elif event_type == "PushEvent":
                         cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std)
                         for commit in payload.get("commits", []): # TODO handle alternative 2011 format (shas instead of commits?)
