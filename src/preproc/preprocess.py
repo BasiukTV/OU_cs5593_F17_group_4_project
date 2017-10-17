@@ -189,8 +189,7 @@ def process_file(path_to_file_and_database):
                         elif a == "edited":
                             pass # TODO
                 except KeyError as er:
-                    print(er)
-                    print(obj)
+                    print("Missing key {} in object\n{}".format(er, obj))
     except IOError as er:
         print(er)
         pass
