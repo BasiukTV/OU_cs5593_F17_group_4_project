@@ -12,4 +12,11 @@
 #SBATCH --workdir=/scratch/timo
 #
 #################################################
-python /home/timo/repo/src/preproc/preprocess.py --indir /scratch/timo/github/ -t1
+scratch="/scratch/timo"
+indir="${scratch}/github"
+outdir="${scratch}/out-${SLURM_JOB_ID}"
+mkdir -p "${outdir}"
+python /home/timo/repo/src/preproc/preprocess.py \
+	--indir "${indir}" \
+	--outdir "${outdir}" \
+	-t1
