@@ -12,4 +12,4 @@
 #SBATCH --workdir=/scratch/timo
 #
 #################################################
-python /home/timo/repo/src/preproc/preprocess.py --directory /scratch/timo/github/ -t1
+python /home/timo/repo/src/preproc/preprocess.py --indir /scratch/timo/github/ -t1
