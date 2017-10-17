@@ -257,7 +257,11 @@ if __name__ == "__main__":
 
     from utils.file_utils import discover_directory_files
     input_files = discover_directory_files(app_data_indir, filename_pattern=filename_pattern)
-    print("Discovered Following Input Data Files: {}".format(input_files))
+    file_count = len(input_files)
+    if file_count > 0:
+        print("Discovered {} Input Data Files, starting with {} and ending with {}".format(file_count, input_files[0], input_files[-1]))
+    else:
+        print("Discovered no Input Data Files")
 
     app_data_outdir = args.outdir if args.outdir else os.path.realpath(app_home_dir + DEFAULT_OUTPUT_DIRECTORY);
     print("Application preprocessed dataset directory will be: {}".format(app_data_outdir))
