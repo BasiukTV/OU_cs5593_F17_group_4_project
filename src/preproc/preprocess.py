@@ -6,10 +6,10 @@ import io
 import os
 from time import gmtime, strftime
 
-DEFAULT_INPUT_DIRECTORY = "/samples/data/raw"; # Relative to home directory of the application
+DEFAULT_INPUT_DIRECTORY = "/input/data/raw"; # Relative to home directory of the application
 DEFAULT_INPUT_FILENAME_PATTERN = "YYYY-MM-DD-HH[-LABEL].json";
 
-DEFAULT_OUTPUT_DIRECTORY = '/samples/data/preproc'; # Relative to home directory of the application
+DEFAULT_OUTPUT_DIRECTORY = '/output/data/preproc'; # Relative to home directory of the application
 DEFAULT_OUTPUT_FILENAME_PATTERN = "preprocessed[-LABEL].sqlite3";
 
 DEFAULT_THREADS_NUMBER = 5;
