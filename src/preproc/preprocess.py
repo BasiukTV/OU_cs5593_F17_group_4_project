@@ -113,12 +113,15 @@ def preprocess_files(files, threads_num):
         files_to_process = batch_size if batch_run != batch_runs else len(files) - starting_file_index
         print("{}: This run will process {} files.".format(now(), files_to_process))
 
-        thread_pool.map(
-                process_file, # execute process_file
-                zip(
-                    files[starting_file_index : starting_file_index + files_to_process], # on these files
-                    [DB_PATH] * files_to_process) # with that database
-                )
+        for f in files[starting_file_index: starting_file_index + files_to_process]:
+            process_file((f, DB_PATH))
+
+        # thread_pool.map(
+        #         process_file, # execute process_file
+        #         zip(
+        #             files[starting_file_index : starting_file_index + files_to_process], # on these files
+        #             [DB_PATH] * files_to_process) # with that database
+        #         )
 
     aggregate_data(con)
     # DEBUG
@@ -177,7 +180,7 @@ def process_file(path_to_file_and_database):
                         elif a == "unlabeled":
                             pass # TODO
                         elif a == "opened":
-                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr("body", "") or ""))) # TODO handle old events without body
+                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr.get("body", "") or ""))) # TODO handle old events without body
                         elif a == "edited":
                             pass # TODO
                         elif a == "closed":
