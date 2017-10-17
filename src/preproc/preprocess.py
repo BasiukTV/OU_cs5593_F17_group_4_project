@@ -139,54 +139,58 @@ def process_file(path_to_file_and_database):
         with open(path_to_file) as json_file:
             for line in json_file:
                 obj = json.loads(line)
-                event_type = obj["type"]
-                event_id = obj["id"]
-                event_time = obj["created_at"]
-                actor_id = obj["actor"]["id"]
-                repo_id = obj["repo"]["id"]
-                payload = obj["payload"]
-                std = (event_id, repo_id, event_time, actor_id) # relevant attributes every event has
+                try:
+                    event_type = obj["type"]
+                    event_id = obj["id"]
+                    event_time = obj["created_at"]
+                    actor_id = obj["actor"]["id"]
+                    repo_id = obj["repo"]["id"]
+                    payload = obj["payload"]
+                    std = (event_id, repo_id, event_time, actor_id) # relevant attributes every event has
 
-                if event_type == "WatchEvent":
-                    cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", std)
-                elif event_type == "CreateEvent":
-                    cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload["description"] or ""), payload["pusher_type"]))
-                elif event_type == "PushEvent":
-                    cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std)
-                    for commit in payload["commits"]:
-                        cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit["distinct"]))
-                elif event_type == "ReleaseEvent":
-                    release = payload["release"]
-                    cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (release["tag_name"], release["name"], release["prerelease"], len(release["assets"])))
-                elif event_type == "PullRequestEvent":
-                    pr = payload["pull_request"]
-                    a = payload["action"]
-                    # TODO consider `locked` attribute
-                    if a == "assigned":
-                        pass # TODO
-                    elif a == "unassigned":
-                        pass # TODO
-                    elif a == "review_requested":
-                        pass # TODO
-                    elif a == "review_request_removed":
-                        pass # TODO
-                    elif a == "labeled":
-                        pass # TODO
-                    elif a == "unlabeled":
-                        pass # TODO
-                    elif a == "opened":
-                        cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr["body"] or "")))
-                    elif a == "edited":
-                        pass # TODO
-                    elif a == "closed":
-                        if pr["merged"]:
-                            pass # pr merged # TODO
-                        else:
-                            pass # pr discarded # TODO
-                    elif a == "reopened":
-                        pass # TODO
-                    elif a == "edited":
-                        pass # TODO
+                    if event_type == "WatchEvent":
+                        cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?)", std)
+                    elif event_type == "CreateEvent":
+                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?)", std + (len(payload["description"] or ""), payload["pusher_type"]))
+                    elif event_type == "PushEvent":
+                        cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?)", std)
+                        for commit in payload["commits"]:
+                            cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit["distinct"]))
+                    elif event_type == "ReleaseEvent":
+                        release = payload["release"]
+                        cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (release["tag_name"], release["name"], release["prerelease"], len(release["assets"])))
+                    elif event_type == "PullRequestEvent":
+                        pr = payload["pull_request"]
+                        a = payload["action"]
+                        # TODO consider `locked` attribute
+                        if a == "assigned":
+                            pass # TODO
+                        elif a == "unassigned":
+                            pass # TODO
+                        elif a == "review_requested":
+                            pass # TODO
+                        elif a == "review_request_removed":
+                            pass # TODO
+                        elif a == "labeled":
+                            pass # TODO
+                        elif a == "unlabeled":
+                            pass # TODO
+                        elif a == "opened":
+                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?)", std + (pr["title"] , len(pr["body"] or "")))
+                        elif a == "edited":
+                            pass # TODO
+                        elif a == "closed":
+                            if pr["merged"]:
+                                pass # pr merged # TODO
+                            else:
+                                pass # pr discarded # TODO
+                        elif a == "reopened":
+                            pass # TODO
+                        elif a == "edited":
+                            pass # TODO
+                except KeyError as er:
+                    print(er)
+                    print(obj)
     except IOError as er:
         print(er)
         pass
