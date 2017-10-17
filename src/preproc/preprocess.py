@@ -1,12 +1,13 @@
-import json
-import multiprocessing
-import sqlite3
+import json, multiprocessing, sqlite3
 from time import gmtime, strftime
 
 DEFAULT_INPUT_DIRECTORY = "/samples/data/raw"; # Relative to home directory of the application
-DEFAULT_FILENAME_PATTERN = "YYYY-MM-DD-HH*.json"; # Tail wildcard is for labels ("-sample" for example)
+DEFAULT_INPUT_FILENAME_PATTERN = "YYYY-MM-DD-HH[-LABEL].json";
+
+DEFAULT_OUTPUT_DIRECTORY = '/samples/data/preproc'; # Relative to home directory of the application
+DEFAULT_OUTPUT_FILENAME_PATTERN = "preprocessed[-LABEL].sqlite3";
+
 DEFAULT_THREADS_NUMBER = 5;
-DB_PATH = 'database.db'; # TODO proper file path
 
 # Process files in one week of worth data batches. Assuming one file holds an hour worth of data.
 DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
@@ -83,17 +84,17 @@ def aggregate_data(con):
 
         cur2.execute("INSERT INTO repos VALUES (?, ?)", (repoid, stars))
 
-def preprocess_files(files, threads_num):
+def preprocess_files(files, threads_num, output_file_path):
     """This preprocesses given list of log files, using given number of threads."""
     print("{}: preprocessing files".format(now()))
 
     # Initialize main database.
     # TODO should we be able to update an existing db?
     try:
-        os.remove(DB_PATH)
+        os.remove(output_file_path)
     except:
         pass
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(output_file_path)
     cur = con.cursor()
     setup_db_scheme(cur);
 
@@ -114,7 +115,7 @@ def preprocess_files(files, threads_num):
         print("{}: This run will process {} files.".format(now(), files_to_process))
 
         for f in files[starting_file_index: starting_file_index + files_to_process]:
-            process_file((f, DB_PATH))
+            process_file((f, output_file_path))
 
         # thread_pool.map(
         #         process_file, # execute process_file
@@ -139,7 +140,7 @@ def process_file(path_to_file_and_database):
     print("{}: Processing {}".format(now(), path_to_file))
 
     try:
-        with open(path_to_file) as json_file:
+        with open(path_to_file, encoding="utf8") as json_file:
             for lineno, line in enumerate(json_file):
                 obj = json.loads(line)
                 event_type = obj.get("type")
@@ -209,7 +210,9 @@ if __name__ == "__main__":
 
     # Configuring CLI arguments parser and parsing the arguments
     parser = argparse.ArgumentParser("Script for parsing input GitHub logs into application specific dataset.")
-    parser.add_argument("-dir", "--directory", help="Input logs file directory.")
+    parser.add_argument("-id", "--indir", help="Input logs file directory.")
+    parser.add_argument("-od", "--outdir", help="Output directory for preprocessed dataset.")
+    parser.add_argument("-l", "--label", help="Run label. Only input files with the label will be used. Output files will contain the label.")
     parser.add_argument("-t", "--threads", help="Number of threads to use for processing.", default=DEFAULT_THREADS_NUMBER)
     parser.add_argument("-y", "--year", help="Year of input data to process. In YYYY format.")
     parser.add_argument("-m", "--month", help="Month of input data to process. In MM format.")
@@ -219,6 +222,9 @@ if __name__ == "__main__":
 
     print("Pre-processing started.")
 
+    if args.label:
+        print("This run is labeled: '{}'.".format(args.label))
+
     app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../..")
     print("Application home directory is: {}".format(app_home_dir))
 
@@ -227,21 +233,29 @@ if __name__ == "__main__":
     print("Application source code directory is: {}".format(app_src_dir))
     sys.path.insert(0, app_src_dir)
 
-    app_data_dir = args.directory if args.directory else os.path.realpath(app_home_dir + DEFAULT_INPUT_DIRECTORY);
-    print("Application input data directory is: {}".format(app_data_dir))
+    app_data_indir = args.indir if args.indir else os.path.realpath(app_home_dir + DEFAULT_INPUT_DIRECTORY);
+    print("Application input data directory is: {}".format(app_data_indir))
 
-    filename_pattern = DEFAULT_FILENAME_PATTERN
-    filename_pattern = filename_pattern.replace("YYYY", args.year if args.year else "*")
-    filename_pattern = filename_pattern.replace("MM", args.month if args.month else "*")
-    filename_pattern = filename_pattern.replace("DD", args.day if args.day else "*")
-    filename_pattern = filename_pattern.replace("HH", args.hour if args.hour else "*")
-    filename_pattern = filename_pattern.replace("**", "*") # Getting rid of a potential double-wildcard which is not what we want
+    filename_pattern = DEFAULT_INPUT_FILENAME_PATTERN
+    filename_pattern = filename_pattern.replace("YYYY", args.year if args.year else "????")
+    filename_pattern = filename_pattern.replace("MM", args.month if args.month else "??")
+    filename_pattern = filename_pattern.replace("DD", args.day if args.day else "??")
+    filename_pattern = filename_pattern.replace("HH", args.hour if args.hour else "??")
+    filename_pattern = filename_pattern.replace("[-LABEL]", "-" + args.label if args.label else "")
     print("Input Data Filename Pattern: {}".format(filename_pattern))
+
+    from utils.file_utils import discover_directory_files
+    input_files = discover_directory_files(app_data_indir, filename_pattern=filename_pattern)
+    print("Discovered Following Input Data Files: {}".format(input_files))
+
+    app_data_outdir = args.outdir if args.outdir else os.path.realpath(app_home_dir + DEFAULT_OUTPUT_DIRECTORY);
+    print("Application preprocessed dataset directory will be: {}".format(app_data_outdir))
+
+    output_filename = DEFAULT_OUTPUT_FILENAME_PATTERN
+    output_filename = output_filename.replace("[-LABEL]", "-" + args.label if args.label else "")
+    output_filename_path = os.path.join(app_data_outdir, output_filename)
+    print("Application preprocessed dataset filename will be: {}".format(output_filename_path))
 
     print("Using Number Of Threads: {}".format(args.threads))
 
-    from utils.file_utils import discover_directory_files
-    input_files = discover_directory_files(app_data_dir, filename_pattern=filename_pattern)
-    print("Discovered Following Input Data Files: {}".format(input_files))
-
-    preprocess_files(input_files, int(args.threads))
+    preprocess_files(input_files, int(args.threads), output_filename_path)
