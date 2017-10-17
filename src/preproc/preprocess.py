@@ -193,7 +193,7 @@ def process_file(path_to_file_and_database):
                         elif a == "edited":
                             pass # TODO
                 except KeyError as er:
-                    print("{}: Found {} without key {} in event {}\n{}".format(path_to_file, event_type, er, event_id))
+                    print("{}: Found {} without key {} in event {}".format(path_to_file, event_type, er, event_id))
     except IOError as er:
         print(er)
         pass
