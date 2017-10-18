@@ -19,4 +19,4 @@ mkdir -p "${outdir}"
 python /home/timo/repo/src/preproc/preprocess.py \
 	--indir "${indir}" \
 	--outdir "${outdir}" \
-	-t1
+	--threads ${SLURM_NTASKS}

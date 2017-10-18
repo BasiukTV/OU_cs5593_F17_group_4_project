@@ -127,6 +127,10 @@ def preprocess_files(files, threads_num, output_file_path):
         for f in files[starting_file_index: starting_file_index + files_to_process]:
             process_file((f, output_file_path))
 
+        # TODO either
+        # - find a way to use sqlite with multiprocessing
+        # - try to use threads instead (keep in mind the global interpreter lock)
+        # - "officially" remove multithreading functinality
         # thread_pool.map(
         #         process_file, # execute process_file
         #         zip(
@@ -135,13 +139,9 @@ def preprocess_files(files, threads_num, output_file_path):
         #         )
 
     aggregate_data(con)
-    # DEBUG
-    # for row in cur.execute('SELECT * FROM repos'):
-    #     print(row)
 
     con.commit()
     con.close()
-    # TODO Deserialize main database into output directory. This is part of issue #11
 
 def process_file(path_to_file_and_database):
     (path_to_file, path_to_database) = path_to_file_and_database
@@ -167,16 +167,20 @@ def process_file(path_to_file_and_database):
                     if event_type == "WatchEvent":
                         cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?)", std)
                     elif event_type == "CreateEvent":
-                        # TODO handle old CreateEvents without description
-                        # TODO and without pusher_type
                         description = payload.get("description") # can be None
                         description_len = None if description is None else len(description)
                         cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?, ?)", std + (description_len, payload.get("pusher_type")))
                     elif event_type == "PushEvent":
                         cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?)", std)
-                        for commit in payload.get("commits", []): # TODO handle alternative 2011 format (shas instead of commits?)
-                            # TODO handle without distinct
-                            cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit["author"]["name"], commit["message"], commit.get("distinct", True)))
+                        commits = payload.get("commits")
+                        if commits is None:
+                            # old format
+                            for commit in payload.get("shas"):
+                                cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit[3], commit[2], None))
+                        else:
+                            # new format
+                            for commit in payload.get("commits"):
+                                cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit.get("author").get("name"), commit.get("message"), commit.get("distinct")))
                     elif event_type == "ReleaseEvent":
                         release = payload["release"]
                         cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (release.get("tag_name"), release.get("name"), release.get("prerelease"), len(release.get("assets"))))
