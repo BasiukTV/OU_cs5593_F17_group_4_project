@@ -319,7 +319,7 @@ def process_file(path_to_file_and_database):
                             # new format
                             cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
                                 comment.get("id"),
-                                commit.get("commit_id"),
+                                comment.get("commit_id"),
                                 len(comment.get("body")),
                             ))
                         else:
