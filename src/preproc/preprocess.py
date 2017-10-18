@@ -17,6 +17,7 @@ DEFAULT_THREADS_NUMBER = 5;
 # Process files in one week of worth data batches. Assuming one file holds an hour worth of data.
 DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
 
+# TODO Whole application should use a proper logger at some point, so this is not needed.
 def now():
     return strftime("%Y-%m-%d %H:%M:%S", gmtime())
 
