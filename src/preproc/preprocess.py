@@ -94,11 +94,16 @@ def preprocess_files(files, threads_num, output_file_path):
     print("{}: preprocessing files".format(now()))
 
     # Initialize main database.
-    # TODO should we be able to update an existing db?
     try:
+        """
+        If output file path already exists. Remove that file.
+        It's OK to remove files in output directory.
+        If main application needed them, they were copied over into input data directory.
+        """
         os.remove(output_file_path)
     except:
         pass
+
     con = sqlite3.connect(output_file_path)
     cur = con.cursor()
     setup_db_scheme(cur);
