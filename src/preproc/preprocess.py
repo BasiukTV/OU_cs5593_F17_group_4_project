@@ -284,34 +284,57 @@ def process_file(path_to_file_and_database):
                         issue = payload.get("issue")
                         a = payload.get("action")
                         if a == "opened":
-                            body = issue.get("body")
-                            body_len = None if body is None else len(body)
-                            cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                                issue.get("id"),
-                                issue.get("title"),
-                                len(issue.get("labels")),
-                                (issue.get("milestone") or {}).get("id"),
-                                body_len
-                            ))
+                            if isinstance(issue, dict):
+                                # new format
+                                body = issue.get("body")
+                                body_len = None if body is None else len(body)
+                                cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                    issue.get("id"),
+                                    issue.get("title"),
+                                    len(issue.get("labels")),
+                                    (issue.get("milestone") or {}).get("id"),
+                                    body_len
+                                ))
+                            else:
+                                cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                    issue
+                                    None, # no title provided
+                                    None, # no labels either
+                                    None, # no milestones
+                                    None # no body
+                                ))
                         elif a == "closed":
+                            issue_id = issue.get("id") if isinstance(issue, dict) else issue
                             cur.execute("INSERT INTO issue_close VALUES(?, ?, ?, ?, ?, ?)", std + (
-                                issue.get("id"),
+                                issue_id
                             ))
                     elif event_type == "CommitCommentEvent":
                         comment = payload.get("comment")
-                        cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                            commit.get("id"),
-                            commit.get("commit_id"),
-                            len(comment.get("body")),
-                        ))
+                        if comment is not None:
+                            # new format
+                            cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                comment.get("id"),
+                                commit.get("commit_id"),
+                                len(comment.get("body")),
+                            ))
+                        else:
+                            # old format
+                            cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                payload.get("comment_id"),
+                                payload.get("commit"),
+                                len(comment.get("body")),
+                            ))
                     elif event_type == "DeleteEvent":
                         ref_type = payload.get("ref_type")
                         cur.execute("INSERT INTO deletes VALUES(?, ?, ?, ?, ?, ?)", std + (
                             ref_type,
                         ))
                     elif event_type == "ForkEvent":
+                        # old vs new format
+                        forkee = payload.get("forkee")
+                        forkee_id = forkee.get("id") if isinstance(forkee, dict) else forkee
                         cur.execute("INSERT INTO forks VALUES(?, ?, ?, ?, ?, ?)", std + (
-                            payload.get("forkee").get("id"),
+                            forkee_id,
                         ))
                     elif event_type == "GollumEvent":
                         # wiki modified
@@ -338,7 +361,8 @@ def process_file(path_to_file_and_database):
                     elif event_type == "MemberEvent":
                         member = payload.get("member")
                         cur.execute("INSERT INTO member_events VALUES(?, ?, ?, ?, ?, ?, ?)", std + (
-                            member.get("id"),
+                            # TODO in old format, member is the name
+                            member.get("id") if isinstance(member, dict) else None,
                             payload.get("action"),
                         ))
                     elif event_type == "PublicEvent":
