@@ -297,11 +297,11 @@ def process_file(path_to_file_and_database):
                                 ))
                             else:
                                 cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                                    issue
+                                    issue,
                                     None, # no title provided
                                     None, # no labels either
                                     None, # no milestones
-                                    None # no body
+                                    None, # no body
                                 ))
                         elif a == "closed":
                             issue_id = issue.get("id") if isinstance(issue, dict) else issue
