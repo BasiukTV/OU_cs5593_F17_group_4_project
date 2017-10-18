@@ -249,7 +249,12 @@ def process_file(path_to_file_and_database):
                         if commits is None:
                             # old format
                             for commit in payload.get("shas"):
-                                cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit[3], commit[2], None))
+                                cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (
+                                    event_id,
+                                    commit[3] if len(commit) >= 4 else None, # some commits don't have a name
+                                    commit[2],
+                                    None
+                                ))
                         else:
                             # new format
                             for commit in payload.get("commits"):
@@ -352,12 +357,21 @@ def process_file(path_to_file_and_database):
                                 ))
                     elif event_type == "IssueCommentEvent":
                         issue = payload.get("issue")
-                        comment = payload.get("comment")
-                        cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                            issue.get("id"),
-                            comment.get("commit_id"),
-                            len(comment.get("body")),
-                        ))
+                        if isinstance(issue, dict):
+                            # new format
+                            comment = payload.get("comment")
+                            cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                issue.get("id"),
+                                comment.get("commit_id"),
+                                len(comment.get("body")),
+                            ))
+                        else:
+                            # old format
+                            cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                payload.get("issue_id"),
+                                payload.get("comment_id"),
+                                None, # no body provided
+                            ))
                     elif event_type == "MemberEvent":
                         member = payload.get("member")
                         cur.execute("INSERT INTO member_events VALUES(?, ?, ?, ?, ?, ?, ?)", std + (
