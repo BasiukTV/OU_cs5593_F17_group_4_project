@@ -306,7 +306,7 @@ def process_file(path_to_file_and_database):
                         elif a == "closed":
                             issue_id = issue.get("id") if isinstance(issue, dict) else issue
                             cur.execute("INSERT INTO issue_close VALUES(?, ?, ?, ?, ?, ?)", std + (
-                                issue_id
+                                issue_id,
                             ))
                     elif event_type == "CommitCommentEvent":
                         comment = payload.get("comment")
@@ -322,7 +322,7 @@ def process_file(path_to_file_and_database):
                             cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
                                 payload.get("comment_id"),
                                 payload.get("commit"),
-                                len(comment.get("body")),
+                                None, # no body provided
                             ))
                     elif event_type == "DeleteEvent":
                         ref_type = payload.get("ref_type")
