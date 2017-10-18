@@ -252,7 +252,7 @@ def process_file(path_to_file_and_database):
                                 cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (
                                     event_id,
                                     commit[3] if len(commit) >= 4 else None, # some commits don't have a name
-                                    commit[2],
+                                    commit[2] if len(commit) >= 3 else None, # I encountered a commit without a message
                                     None
                                 ))
                         else:
