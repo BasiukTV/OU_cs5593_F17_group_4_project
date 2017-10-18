@@ -385,7 +385,10 @@ def process_file(path_to_file_and_database):
                         pr = payload.get("pull_request")
                         comment = payload.get("comment")
                         cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                            pr.get("id"),
+                            # TODO there is no pr id in the old format, but you can get the pr number indirectly
+                            # through the pull request link (["_links"]["pull_request""])
+                            # That can then lead to the pr id
+                            None if pr is None else pr.get("id"),
                             comment.get("commit_id"),
                             len(comment.get("body")),
                         ))
