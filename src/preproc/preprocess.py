@@ -26,10 +26,10 @@ def setup_db_scheme(cur):
     # I'm not sure aobut the performance implications though: Basically every action would require a join.
     common_attrs = '''
         id integer primary key autoincrement,
-        event_id number,
-        repo_id number,
+        event_id integer,
+        repo_id integer,
         time text,
-        actor_id number
+        actor_id integer
     '''
     cur.execute('''
         CREATE TABLE starrings (
@@ -37,9 +37,14 @@ def setup_db_scheme(cur):
         )
     '''.format(common_attrs))
     cur.execute('''
+        CREATE TABLE publications (
+            {}
+        )
+    '''.format(common_attrs))
+    cur.execute('''
         CREATE TABLE creations (
             {},
-            description_len number,
+            description_len integer,
             pusher_type text
         )
     '''.format(common_attrs))
@@ -50,7 +55,7 @@ def setup_db_scheme(cur):
     '''.format(common_attrs))
     cur.execute('''
         CREATE TABLE commits (
-            event_id number,
+            event_id integer,
             author_name text,
             message text,
             distinct_ bool
@@ -62,26 +67,84 @@ def setup_db_scheme(cur):
             tag_name text,
             name text,
             prerelease bool,
-            num_assets number
+            num_assets integer
         )
     '''.format(common_attrs))
     cur.execute('''
         CREATE TABLE pr_opens (
             {},
+            pr_id integer,
             title text,
+            body_len integer
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE issue_opens (
+            {},
+            issue_id number,
+            title text,
+            label_no number,
+            milestone text,
             body_len number
         )
     '''.format(common_attrs))
     cur.execute('''
         CREATE TABLE pr_close (
             {},
-            title text,
+            pr_id integer,
             merged bool
         )
     '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE issue_close (
+            {},
+            issue_id integer
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE forks (
+            {},
+            forkee_id integer
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE deletes (
+            {},
+            type text
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE issue_comments (
+            {},
+            issue_id integer,
+            comment_id integer,
+            body_len integer
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE commit_comments (
+            {},
+            comment_id integer,
+            commit_id integer,
+            body_len integer
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE member_events (
+            {},
+            member_id integer,
+            event_type text
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE wiki_events (
+            {},
+            event_type text
+        )
+    '''.format(common_attrs))
     cur.execute('''CREATE TABLE repos (
-        repo_id number PRIMARY KEY,
-        number_of_stars number
+        repo_id integer PRIMARY KEY,
+        number_of_stars integer
         )
     ''')
 
@@ -136,7 +199,7 @@ def preprocess_files(files, threads_num, output_file_path):
 
         # TODO either
         # - find a way to use sqlite with multiprocessing
-        # - try to use threads instead (keep in mind the global interpreter lock)
+        # - handle multiprocessing manually, keep multiple databases and merge later
         # - "officially" remove multithreading functinality
         # thread_pool.map(
         #         process_file, # execute process_file
@@ -176,7 +239,10 @@ def process_file(path_to_file_and_database):
                     elif event_type == "CreateEvent":
                         description = payload.get("description") # can be None
                         description_len = None if description is None else len(description)
-                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?, ?)", std + (description_len, payload.get("pusher_type")))
+                        cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?, ?)", std + (
+                            description_len,
+                            payload.get("pusher_type")
+                        ))
                     elif event_type == "PushEvent":
                         cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?)", std)
                         commits = payload.get("commits")
@@ -201,15 +267,85 @@ def process_file(path_to_file_and_database):
                         # - edited
                         # - reopened
                         if a == "opened":
-                            body = payload.get("body") # can be None
+                            body = pr.get("body") # can be None TODO Payload?
                             body_len = None if body is None else len(body)
-                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?)", std + (pr.get("title") , body_len))
+                            cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                pr.get("id"),
+                                pr.get("title"),
+                                body_len,
+                            ))
                         elif a == "closed":
                             merged = pr.get("merged") # if false, pr was discarded. May be None in old events.
-                            cur.execute("INSERT INTO pr_close VALUES(?, ?, ?, ?, ?, ?, ?)", std + (pr.get("title") , merged))
+                            cur.execute("INSERT INTO pr_close VALUES(?, ?, ?, ?, ?, ?, ?)", std + (
+                                pr.get("id"),
+                                merged
+                            ))
+                    elif event_type == "IssuesEvent":
+                        issue = payload.get("issue")
+                        a = payload.get("action")
+                        if a == "opened":
+                            body = issue.get("body")
+                            body_len = None if body is None else len(body)
+                            cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                                issue.get("id"),
+                                issue.get("title"),
+                                len(issue.get("labels")),
+                                (issue.get("milestone") or {}).get("id"),
+                                body_len
+                            ))
+                        elif a == "closed":
+                            cur.execute("INSERT INTO issue_close VALUES(?, ?, ?, ?, ?, ?)", std + (
+                                issue.get("id"),
+                            ))
+                    elif event_type == "CommitCommentEvent":
+                        comment = payload.get("comment")
+                        cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            commit.get("id"),
+                            commit.get("commit_id"),
+                            len(comment.get("body")),
+                        ))
+                    elif event_type == "DeleteEvent":
+                        ref_type = payload.get("ref_type")
+                        cur.execute("INSERT INTO deletes VALUES(?, ?, ?, ?, ?, ?)", std + (
+                            ref_type,
+                        ))
+                    elif event_type == "ForkEvent":
+                        cur.execute("INSERT INTO forks VALUES(?, ?, ?, ?, ?, ?)", std + (
+                            payload.get("forkee").get("id"),
+                        ))
+                    elif event_type == "GollumEvent":
+                        # wiki modified
+                        for page in payload.get("pages"):
+                            cur.execute("INSERT INTO wiki_events VALUES(?, ?, ?, ?, ?, ?)", std + (
+                                page.get("action"),
+                            ))
+                    elif event_type == "IssueCommentEvent":
+                        issue = payload.get("issue")
+                        comment = payload.get("comment")
+                        cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            issue.get("id"),
+                            comment.get("commit_id"),
+                            len(comment.get("body")),
+                        ))
+                    elif event_type == "MemberEvent":
+                        member = payload.get("member")
+                        cur.execute("INSERT INTO member_events VALUES(?, ?, ?, ?, ?, ?, ?)", std + (
+                            member.get("id"),
+                            payload.get("action"),
+                        ))
+                    elif event_type == "PublicEvent":
+                        cur.execute("INSERT INTO publications VALUES(?, ?, ?, ?, ?)", std)
+                    elif event_type == "PullRequestReviewCommentEvent":
+                        pr = payload.get("pull_request")
+                        comment = payload.get("comment")
+                        cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            pr.get("id"),
+                            comment.get("commit_id"),
+                            len(comment.get("body")),
+                        ))
                 except Exception as e: 
                     from sys import stderr
-                    print("{}: Error while processing line {} of {}:\n{}".format(now(),lineno, path_to_file, e), file=stderr)
+                    print("{}: Error while processing line {} of {} (type {}):\n{}".format(now(),lineno, path_to_file, obj.get("type"), e), file=stderr)
     except IOError as er:
         print(er)
         pass
