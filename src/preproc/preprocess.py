@@ -72,6 +72,13 @@ def setup_db_scheme(cur):
             body_len number
         )
     '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE pr_close (
+            {},
+            title text,
+            merged bool
+        )
+    '''.format(common_attrs))
     cur.execute('''CREATE TABLE repos (
         repo_id number PRIMARY KEY,
         number_of_stars number
@@ -187,34 +194,19 @@ def process_file(path_to_file_and_database):
                     elif event_type == "PullRequestEvent":
                         pr = payload.get("pull_request")
                         a = payload.get("action")
-                        # TODO consider `locked` attribute
-                        if a == "assigned":
-                            pass # TODO
-                        elif a == "unassigned":
-                            pass # TODO
-                        elif a == "review_requested":
-                            pass # TODO
-                        elif a == "review_request_removed":
-                            pass # TODO
-                        elif a == "labeled":
-                            pass # TODO
-                        elif a == "unlabeled":
-                            pass # TODO
-                        elif a == "opened":
+                        # there are a lot of other actions, but they were all introduced after 2015:
+                        # - assigned, unassigned
+                        # - review_requested, review_request_removed
+                        # - labeled, unlabeled
+                        # - edited
+                        # - reopened
+                        if a == "opened":
                             body = payload.get("body") # can be None
                             body_len = None if body is None else len(body)
                             cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?)", std + (pr.get("title") , body_len))
-                        elif a == "edited":
-                            pass # TODO
                         elif a == "closed":
-                            if pr.get("merged", True): # TODO handle old events without merged
-                                pass # pr merged # TODO
-                            else:
-                                pass # pr discarded # TODO
-                        elif a == "reopened":
-                            pass # TODO
-                        elif a == "edited":
-                            pass # TODO
+                            merged = pr.get("merged") # if false, pr was discarded. May be None in old events.
+                            cur.execute("INSERT INTO pr_close VALUES(?, ?, ?, ?, ?, ?, ?)", std + (pr.get("title") , merged))
                 except Exception as e: 
                     from sys import stderr
                     print("{}: Error while processing line {} of {}:\n{}".format(now(),lineno, path_to_file, e), file=stderr)
