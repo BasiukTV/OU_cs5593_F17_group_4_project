@@ -315,10 +315,18 @@ def process_file(path_to_file_and_database):
                         ))
                     elif event_type == "GollumEvent":
                         # wiki modified
-                        for page in payload.get("pages"):
+                        pages = payload.get("pages")
+                        if pages is None:
+                            # old format: just one page, directly in payload
                             cur.execute("INSERT INTO wiki_events VALUES(?, ?, ?, ?, ?, ?)", std + (
-                                page.get("action"),
+                                payload.get("action"),
                             ))
+                        else:
+                            # new format: multiple pages possible
+                            for page in payload.get("pages"):
+                                cur.execute("INSERT INTO wiki_events VALUES(?, ?, ?, ?, ?, ?)", std + (
+                                    page.get("action"),
+                                ))
                     elif event_type == "IssueCommentEvent":
                         issue = payload.get("issue")
                         comment = payload.get("comment")
