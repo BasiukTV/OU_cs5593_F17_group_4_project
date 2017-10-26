@@ -1,5 +1,9 @@
-from database.preproc_db import PreprocessingDatabase
+# Standard library imports
 import sqlite3
+from threading import Lock
+
+# This application modules imports
+from database.preproc_db import PreprocessingDatabase
 
 class SQLitePreprocessingDatabase(PreprocessingDatabase):
     """SQLIte class for the database instance used for hosting preprocessed data."""
@@ -24,6 +28,9 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
 
         # Establish an SQLite connection
         self.db_connection = sqlite3.connect(endpoint)
+
+        # SQLite is not thread safe. We will have to manage an access lock
+        self.lock = Lock()
 
         # Install a schema for a new preprocessing database
         if existing == False:
@@ -84,13 +91,17 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
         self.db_connection.close()
 
     def insert_repository_record(self, repository_record):
-        """Inserts a repository record into preprocessing database."""
-        # TODO Implement this
+        """Inserts a repository record into preprocessing database in thread safe manner."""
+        with self.lock:
+            # TODO Implement this
+            pass
         pass
 
     def insert_contributor_record(self, contributor_record):
-        """Inserts a repository record into preprocessing database."""
-        # TODO Implement this
+        """Inserts a repository record into preprocessing database in thread safe manner."""
+        with self.lock:
+            # TODO Implement this
+            pass
         pass
 
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
