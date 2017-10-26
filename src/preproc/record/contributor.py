@@ -1,4 +1,4 @@
-from record import Record
+from preproc.record.record import Record
 
 class Contributor(Record):
     """Class for preprocessed dataset contributor record."""
@@ -17,7 +17,7 @@ class Contributor(Record):
             issue_other_activity_count = 0,
             owned_repos_starts_count = 0,
             reserve1 = 0,
-            reserve2 = 0):
+            reserve2 = ""):
 
         Record.__init__(self, contributorID, timestamp)
         self.repos_started_count = repos_started_count

@@ -1,4 +1,4 @@
-from record import Record
+from preproc.record.record import Record
 
 class Repository(Record):
     """Class for preprocessed dataset repository record."""
@@ -21,7 +21,7 @@ class Repository(Record):
             resolved_issue_count = 0,
             org_activity_count = 0,
             reserve1 = 0,
-            reserve2 = 0):
+            reserve2 = ""):
 
         Record.__init__(self, repositoryID, timestamp)
         self.star_count = star_count

@@ -93,16 +93,50 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
     def insert_repository_record(self, repository_record):
         """Inserts a repository record into preprocessing database in thread safe manner."""
         with self.lock:
-            # TODO Implement this
-            pass
-        pass
+            self.db_connection.cursor().execute("INSERT INTO repository VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, '{}')"
+                .format(
+                    repository_record.entityID,
+                    repository_record.timestamp,
+                    repository_record.star_count,
+                    repository_record.total_contributor_count,
+                    repository_record.contributor_type1_count,
+                    repository_record.contributor_type2_count,
+                    repository_record.contributor_type3_count,
+                    repository_record.contributor_type4_count,
+                    repository_record.contributor_type5_count,
+                    repository_record.code_push_count,
+                    repository_record.pull_request_count,
+                    repository_record.fork_count,
+                    repository_record.release_count,
+                    repository_record.active_issues_count,
+                    repository_record.resolved_issue_count,
+                    repository_record.org_activity_count,
+                    repository_record.reserve1,
+                    repository_record.reserve2))
+            self.db_connection.commit()
+        return
 
     def insert_contributor_record(self, contributor_record):
         """Inserts a repository record into preprocessing database in thread safe manner."""
         with self.lock:
-            # TODO Implement this
-            pass
-        pass
+            self.db_connection.cursor().execute("INSERT INTO contributor VALUES({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, '{}')"
+                .format(
+                    contributor_record.entityID,
+                    contributor_record.timestamp,
+                    contributor_record.repos_started_count,
+                    contributor_record.repos_forked_count,
+                    contributor_record.code_pushed_count,
+                    contributor_record.pull_request_created_count,
+                    contributor_record.pull_request_reviewed_count,
+                    contributor_record.issue_created_count,
+                    contributor_record.issue_resolved_count,
+                    contributor_record.issue_commented_count,
+                    contributor_record.issue_other_activity_count,
+                    contributor_record.owned_repos_starts_count,
+                    contributor_record.reserve1,
+                    contributor_record.reserve2))
+            self.db_connection.commit()
+        return
 
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
         """Merges data from an intermidiate preprocessing database into this database."""
