@@ -5,3 +5,7 @@
 
 ## Usage Example
 - `python preprocess.py --indir ../../samples/data/raw`
+
+## Directory/File Structure
+- `record/` - Folder for definitions of repository/contributor records for preprocessed dataset.
+- `preprocess.py` - Data preprocessing script.
