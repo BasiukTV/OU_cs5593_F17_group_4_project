@@ -143,24 +143,6 @@ def setup_db_scheme(cur):
             event_type text
         )
     '''.format(common_attrs))
-    cur.execute('''CREATE TABLE repos (
-        repo_id integer PRIMARY KEY,
-        number_of_stars integer
-        )
-    ''')
-
-def aggregate_data(con):
-    print("{}: aggregating data".format(now()))
-    # spend a few (~10) minutes on creating an index once instead of linearly searching for every repo
-    con.execute("CREATE INDEX star_repo on starrings(repo_id)");
-    cur1 = con.cursor()
-    cur2 = con.cursor()
-    for row in cur1.execute("SELECT DISTINCT repo_id FROM starrings"):
-        repoid = row[0]
-        cur2.execute("SELECT count(*) FROM starrings WHERE repo_id = ?", (str(repoid),))
-        stars = cur2.fetchone()[0]
-
-        cur2.execute("INSERT INTO repos VALUES (?, ?)", (repoid, stars))
 
 def preprocess_files(files, threads_num, output_file_path):
     """This preprocesses given list of log files, using given number of threads."""
@@ -211,7 +193,6 @@ def preprocess_files(files, threads_num, output_file_path):
         #             [DB_PATH] * files_to_process) # with that database
         #         )
 
-    # aggregate_data(con)
 
     con.commit()
     con.close()
@@ -404,7 +385,7 @@ def process_file(path_to_file_and_database):
     db.commit()
     db.close()
 
-# Entry point for running pre-processing step separately
+# Entry point for running the json parsing step separately
 if __name__ == "__main__":
     import argparse, os, sys
 
@@ -420,7 +401,7 @@ if __name__ == "__main__":
     parser.add_argument("-hr", "--hour", help="Hour of input data to process. In HH format.")
     args = parser.parse_args()
 
-    print("Pre-processing started.")
+    print("Json parsing started.")
 
     if args.label:
         print("This run is labeled: '{}'.".format(args.label))
