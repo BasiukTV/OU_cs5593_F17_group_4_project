@@ -151,6 +151,8 @@ def setup_db_scheme(cur):
 
 def aggregate_data(con):
     print("{}: aggregating data".format(now()))
+    # spend a few (~10) minutes on creating an index once instead of linearly searching for every repo
+    con.execute("CREATE INDEX star_repo on starrings(repo_id)");
     cur1 = con.cursor()
     cur2 = con.cursor()
     for row in cur1.execute("SELECT DISTINCT repo_id FROM starrings"):
@@ -209,7 +211,7 @@ def preprocess_files(files, threads_num, output_file_path):
         #             [DB_PATH] * files_to_process) # with that database
         #         )
 
-    aggregate_data(con)
+    # aggregate_data(con)
 
     con.commit()
     con.close()
