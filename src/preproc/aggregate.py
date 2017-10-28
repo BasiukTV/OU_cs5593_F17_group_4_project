@@ -17,47 +17,50 @@ def tryexec(con, cmd):
     except sqlite3.OperationalError:
         pass
 
+def delete_indices(con):
+    tryexec(con, "DROP INDEX star_repo");
+
+def drop_tables(con):
+    tryexec(con, "DROP TABLE repos");
+
 # for testing purposes, make sure to remove all results of the last run
 def reset_database(con):
-    tryexec(con, "DROP INDEX star_repo");
-    tryexec(con, "DROP TABLE repos");
+    # delete_indices(con) # not during development; TODO make configurable
+    drop_tables(con)
 
 # create all the nessessary tables
 def setup_db(con):
-    con.execute('''CREATE TABLE repos (
+    tryexec(con, '''CREATE TABLE repos (
         repo_id integer PRIMARY KEY,
         number_of_stars integer
         )
     ''')
-    print("{}: creating index on starrings".format(now()))
+    log("creating index on starrings")
     # spend a few (~10) minutes on creating an index once instead of linearly searching for every repo
-    con.execute("CREATE INDEX star_repo on starrings(repo_id)");
+    tryexec(con, "CREATE INDEX star_repo on starrings(repo_id)");
 
 # move from intermediate parsed database to the aggregated format
 def aggregate_data(database_file):
     con = sqlite3.connect(database_file)
-    print("{}: resetting the database".format(now()))
+    log("resetting the database")
     reset_database(con);
-    print("{}: setting up the necessary tables".format(now()))
+    log("setting up the necessary tables")
     setup_db(con);
 
-    print("{}: aggregating data".format(now()))
+    log("aggregating data")
     cur1 = con.cursor()
     cur2 = con.cursor()
-    print("{}: aggregating stars".format(now()))
-    i = 0
+    log("aggregating stars")
     for row in cur1.execute("SELECT DISTINCT repo_id FROM starrings"):
         repoid = row[0]
         if repoid is None:
-            # TODO
-            print("Skipping {}".format(i))
+            # TODO don't use repoid, as it is unrelyable. Instead use owner/name.
             continue
         cur2.execute("SELECT count(*) FROM starrings WHERE repo_id = ?", (str(repoid),))
         stars = cur2.fetchone()[0]
         cur2.execute("INSERT INTO repos VALUES (?, ?)", (repoid, stars))
-        i += 1
-        if (i % 100 == 0):
-            print("{}: done with {} repos".format(now(), i))
+    con.commit()
+    con.close()
 
 DEFAULT_DB_FILE = "/input/data/preprocessed.sqlite3"; # Relative to home directory of the application
 
