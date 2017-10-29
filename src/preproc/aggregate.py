@@ -1,14 +1,7 @@
 import sqlite3
 import io
 import os
-from time import gmtime, strftime
-
-# TODO put in utils module
-def now():
-    return strftime("%Y-%m-%d %H:%M:%S", gmtime())
-
-def log(string, *args):
-    print("{}: {}".format(now(), string).format(args))
+from utils.logging import log
 
 # ignore errors (such as the tale we're trying to delete does not exist)
 def tryexec(con, cmd):
