@@ -12,7 +12,7 @@ app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/
 app_src_dir = os.path.realpath(app_home_dir + "/src")
 sys.path.insert(0, app_src_dir)
 
-from utils.logging import log
+from utils.logging import log, elog
 
 DEFAULT_INPUT_DIRECTORY = "/input/data/raw"; # Relative to home directory of the application
 DEFAULT_INPUT_FILENAME_PATTERN = "YYYY-MM-DD-HH[-LABEL].json";

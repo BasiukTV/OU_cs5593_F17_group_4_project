@@ -1,7 +1,12 @@
 import sqlite3
 import io
 import os
-from utils.logging import log
+
+# Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
+app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../..")
+app_src_dir = os.path.realpath(app_home_dir + "/src")
+sys.path.insert(0, app_src_dir)
+from utils.logging import log, elog
 
 # ignore errors (such as the tale we're trying to delete does not exist)
 def tryexec(con, cmd):
