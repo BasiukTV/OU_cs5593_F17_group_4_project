@@ -16,7 +16,7 @@ scratch="/scratch/timo"
 indir="${scratch}/github"
 outdir="${scratch}/out-${SLURM_JOB_ID}"
 mkdir -p "${outdir}"
-python /home/timo/repo/src/preproc/parse_json.py \
+python3 /home/timo/repo/src/preproc/parse_json.py \
 	--indir "${indir}" \
 	--outdir "${outdir}" \
 	--threads ${SLURM_NTASKS}
