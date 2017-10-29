@@ -216,17 +216,18 @@ def process_file(path_to_file_and_database):
                     actor = obj.get("actor", {})
                     # old records store just the name of the actor with a seperate actor_attributes field (which doesn't contain the id either)
                     actor_id = actor.get("id") if isinstance(actor, dict) else None
-                    repo_id = obj.get("repo", {}).get("id") # can be None
                     # For some reason, the repo might be specified in either format ("repo" or "repository").
                     # This even happens in newer records.
                     repo = obj.get("repository")
                     if repo is not None:
                         repo_name = obj.get("repository", {}).get("name")
                         repo_owner = obj.get("repository", {}).get("owner")
+                        repo_id = repo.get("id")
                     else:
                         repo = obj.get("repo")
                         repo_name = repo.get("name")
                         repo_owner = repo.get("owner").get("login")
+                        repo_id = repo.get("id")
                     payload = obj.get("payload", {})
                     std = (None, event_id, repo_id, repo_owner, repo_name, event_time, actor_id) # relevant attributes every event has
 
