@@ -230,7 +230,7 @@ def process_file(path_to_file_and_database):
 
                 # TODO debug
                 if repo_id is None:
-                    elog("repo_id found to be None while processing line {} of {}:\n{}",lineno, path_to_file)
+                    elog("repo_id found to be None while processing line {} of {}", lineno, path_to_file)
                     raise ValueError("Unexpected None")
 
                 payload = obj.get("payload", {})
@@ -395,7 +395,7 @@ def process_file(path_to_file_and_database):
                         len(comment.get("body")),
                     ))
             except Exception as e: 
-                elog("Error while processing line {} of {} (type {}):\n{}",lineno, path_to_file, obj.get("type", e))
+                elog("Error while processing line {} of {} (type {}):\n{}", lineno, path_to_file, obj.get("type"), e)
                 raise(e)
 
     db.commit()
