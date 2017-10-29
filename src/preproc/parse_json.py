@@ -224,16 +224,19 @@ def process_file(path_to_file_and_database):
                 # This even happens in newer records.
                 repo = obj.get("repository") or obj.get("repo")
                 repo_name = repo.get("name")
-                repo_owner_name = repo.get("owner")
-                repo_owner_id = repo.get("owner")
-                if repo_name = "/": # the actual repo is in the payload
+                repo_owner = repo.get("owner")
+                repo_owner_name = None
+                repo_owner_id = None
+                if repo_name == "/": # the actual repo is in the payload
                     repo_name = None
                     repo_fullname = payload.get("repo")
                     if repo_fullname is not None:
-                        (repo_name, repo_owner) = tuple(repo_fullname.split("/"))
+                        (repo_name, repo_owner_name) = tuple(repo_fullname.split("/"))
                 elif isinstance(repo_owner, dict): # repo_owner may be just the name or a dict containing the user info
                     repo_owner_name = repo_owner.get("login")
                     repo_owner_id = repo_owner.get("id")
+                else:
+                    repo_owner_name = repo_owner
                 repo_id = repo.get("id")
 
                 # TODO debug
