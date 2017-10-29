@@ -34,7 +34,8 @@ def setup_db_scheme(cur):
         event_id integer,
         repo_id integer,
         repo_name text,
-        repo_owner text,
+        repo_owner_name text,
+        repo_owner_id integer,
         time text,
         actor_id integer
     '''
