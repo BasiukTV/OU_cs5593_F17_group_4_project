@@ -223,7 +223,7 @@ def process_file(path_to_file_and_database):
                 actor_id = actor.get("id") if isinstance(actor, dict) else None
                 # For some reason, the repo might be specified in either format ("repo" or "repository").
                 # This even happens in newer records.
-                repo = obj.get("repository") or obj.get("repo")
+                repo = obj.get("repository") or obj.get("repo") or {}
                 repo_name = repo.get("name")
                 repo_owner = repo.get("owner")
                 repo_owner_name = None
@@ -233,6 +233,8 @@ def process_file(path_to_file_and_database):
                     repo_fullname = payload.get("repo")
                     if repo_fullname is not None:
                         (repo_name, repo_owner_name) = tuple(repo_fullname.split("/"))
+                elif repo_name is not None and repo_owner is None:
+                    (repo_name, repo_owner_name) = tuple(repo_name.split("/"))
                 elif isinstance(repo_owner, dict): # repo_owner may be just the name or a dict containing the user info
                     repo_owner_name = repo_owner.get("login")
                     repo_owner_id = repo_owner.get("id")
@@ -245,7 +247,7 @@ def process_file(path_to_file_and_database):
                 #     elog("repo_id found to be None while processing line {} of {}", lineno, path_to_file)
                 #     raise ValueError("Unexpected None")
 
-                std = (None, event_id, repo_id, repo_owner_name, repo_owner_id, repo_name, event_time, actor_id) # relevant attributes every event has
+                std = (None, event_id, repo_id, repo_name, repo_owner_name, repo_owner_id, event_time, actor_id) # relevant attributes every event has
 
                 if event_type == "WatchEvent":
                     cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std)
@@ -393,7 +395,7 @@ def process_file(path_to_file_and_database):
                         payload.get("action"),
                     ))
                 elif event_type == "PublicEvent":
-                    cur.execute("INSERT INTO publications VALUES(?, ?, ?, ?, ?, ?, ?)", std)
+                    cur.execute("INSERT INTO publications VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std)
                 elif event_type == "PullRequestReviewCommentEvent":
                     pr = payload.get("pull_request")
                     comment = payload.get("comment")
@@ -405,7 +407,7 @@ def process_file(path_to_file_and_database):
                         comment.get("commit_id"),
                         len(comment.get("body")),
                     ))
-            except Exception as e: 
+            except Exception as e:
                 elog("Error while processing line {} of {} (type {}):\n{}", lineno, path_to_file, obj.get("type"), e)
                 raise(e)
 
