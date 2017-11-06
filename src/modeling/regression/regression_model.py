@@ -1,6 +1,7 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+from modeling.serializable_model import SerializableModel
 
-class RegressionModel(ABC):
+class RegressionModel(SerializableModel):
     """Abstract base class of a model produced by regression modeling with different algorithms."""
 
     def __init__(self):
@@ -9,14 +10,4 @@ class RegressionModel(ABC):
     @abstractmethod
     def regression_on_repository(sefl, repository_record):
         """Returns a regression on given repository_record according to the model."""
-        pass
-
-    @abstractmethod
-    def serialize_to_file(self, path_to_model):
-        """Saves current model to a file."""
-        pass
-
-    @abstractmethod
-    def initialize_from_file(self, path_to_model):
-        """Initializes this model from a file."""
         pass

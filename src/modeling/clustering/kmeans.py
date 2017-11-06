@@ -14,7 +14,7 @@ class KMeansModel(ClusterModel):
         # TODO This simply calls super constructor and might need (or not) updates
         super().__init__()
 
-    def cluster_contributor(sefl, repository_record):
+    def cluster_contributor(self, contributor_record):
         # TODO Implement this
         pass
 
@@ -22,7 +22,7 @@ class KMeansModel(ClusterModel):
         # TODO Implement this
         pass
 
-    def initialize_from_file(self, path_to_model):
+    def deserialize_from_file(self, path_to_model):
         # TODO Implement this
         pass
 
@@ -32,7 +32,7 @@ class KMeansModeling(Modeling):
         super().__init__(preproc_dataset_path)
         # TODO This simply calls super constructor and might need (or not) updates
 
-    def run_modeling(cross_validation_params, model_output_path):
+    def run_modeling(self, cross_validation_params):
         # TODO Implement this
         return KMeansModel()
 
@@ -46,6 +46,6 @@ if  __name__ == "__main__":
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
     modeling = KMeansModeling(args.dataset)
-    model = modeling.run_modeling()
+    model = modeling.run_modeling("not_actual_cross_validation_params")
     model.serialize_to_file("not_an_anctual_path_to_file")
     pass
