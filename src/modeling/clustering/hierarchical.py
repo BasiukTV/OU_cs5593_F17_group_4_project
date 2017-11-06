@@ -9,7 +9,7 @@ sys.path.insert(0, app_src_dir)
 from modeling.modeling import Modeling
 from modeling.clustering.cluster_model import ClusterModel
 
-class KMeansModel(ClusterModel):
+class HierarchicalModel(ClusterModel):
     def __init__(self):
         # TODO This simply calls super constructor and might need (or not) updates
         super().__init__()
@@ -26,7 +26,7 @@ class KMeansModel(ClusterModel):
         # TODO Implement this
         pass
 
-class KMeansModeling(Modeling):
+class HierarchicalModeling(Modeling):
 
     def __init__(self, preproc_dataset_path):
         super().__init__(preproc_dataset_path)
@@ -34,18 +34,18 @@ class KMeansModeling(Modeling):
 
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
-        return KMeansModel()
+        return HierarchicalModel()
 
 if  __name__ == "__main__":
     import argparse
 
     # Configuring CLI arguments parser and parsing the arguments
-    parser = argparse.ArgumentParser("Script for creating a kmeans clustering model of GitHub contributors.")
+    parser = argparse.ArgumentParser("Script for creating a kmeans hierarchical model of GitHub contributors.")
     parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
     args = parser.parse_args()
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
-    modeling = KMeansModeling(args.dataset)
+    modeling = HierarchicalModeling(args.dataset)
     model = modeling.run_modeling("not_actual_cross_validation_params")
     model.serialize_to_file("not_an_anctual_path_to_file")
     pass
