@@ -50,7 +50,21 @@ def setup_db_scheme(cur):
         )
     '''.format(common_attrs))
     cur.execute('''
-        CREATE TABLE creations (
+        CREATE TABLE repo_creations (
+            {},
+            description_len integer,
+            pusher_type text
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE branch_creations (
+            {},
+            description_len integer,
+            pusher_type text
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE tag_creations (
             {},
             description_len integer,
             pusher_type text
@@ -234,30 +248,41 @@ def process_file(path_to_file_and_database):
                     if repo_fullname is not None:
                         (repo_name, repo_owner_name) = tuple(repo_fullname.split("/"))
                 elif repo_name is not None and repo_owner is None:
-                    (repo_name, repo_owner_name) = tuple(repo_name.split("/"))
+                    (repo_owner_name, repo_name) = tuple(repo_name.split("/"))
                 elif isinstance(repo_owner, dict): # repo_owner may be just the name or a dict containing the user info
+                    # TODO test in the whole dataset if this case ver actually occurs
                     repo_owner_name = repo_owner.get("login")
                     repo_owner_id = repo_owner.get("id")
                 else:
                     repo_owner_name = repo_owner
                 repo_id = repo.get("id")
 
-                # TODO debug
-                # if repo_id is None:
-                #     elog("repo_id found to be None while processing line {} of {}", lineno, path_to_file)
-                #     raise ValueError("Unexpected None")
-
                 std = (None, event_id, repo_id, repo_name, repo_owner_name, repo_owner_id, event_time, actor_id) # relevant attributes every event has
 
                 if event_type == "WatchEvent":
                     cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std)
                 elif event_type == "CreateEvent":
+                    # TODO seperate different create events
                     description = payload.get("description") # can be None
                     description_len = None if description is None else len(description)
-                    cur.execute("INSERT INTO creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                        description_len,
-                        payload.get("pusher_type")
-                    ))
+                    t = payload.get("ref_type") or payload.get("object") # object is old format
+                    if t == "branch":
+                        cur.execute("INSERT INTO branch_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            description_len,
+                            payload.get("pusher_type")
+                        ))
+                    elif t == "tag":
+                        cur.execute("INSERT INTO tag_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            description_len,
+                            payload.get("pusher_type")
+                        ))
+                    elif t == "repository":
+                        cur.execute("INSERT INTO repo_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            description_len,
+                            payload.get("pusher_type")
+                        ))
+                    else:
+                        elog("Malformed CreateEvent: {}".format(json.dumps(obj)))
                 elif event_type == "PushEvent":
                     cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std)
                     commits = payload.get("commits")
