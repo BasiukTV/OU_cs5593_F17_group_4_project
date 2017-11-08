@@ -6,6 +6,7 @@ import io
 import os
 import sys
 from time import gmtime, strftime
+from datetime import datetime
 
 # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
 app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../..")
@@ -232,6 +233,13 @@ def process_file(path_to_file_and_database):
                 event_type = obj.get("type")
                 event_id = obj.get("id") # not all events have ids, can be None
                 event_time = obj.get("created_at")
+                # normalize to ISO 8601 in UTC
+                if event_time[-1] == 'Z':
+                    event_time = event_time[:-1]
+                else:
+                    tmp = datetime.strptime(event_time[:-6], "%Y-%m-%dT%H:%M:%S")
+                    offset = datetime.strptime(event_time[-6:-3] + event_time[-2:], "%z")
+                    event_time = (tmp - offset.utcoffset()).isoformat()
                 actor = obj.get("actor", {})
                 # old records store just the name of the actor with a seperate actor_attributes field (which doesn't contain the id either)
                 actor_id = actor.get("id") if isinstance(actor, dict) else None
