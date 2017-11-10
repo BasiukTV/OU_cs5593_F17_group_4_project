@@ -3,27 +3,38 @@ import io
 import os
 import argparse
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
 app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../..")
 app_src_dir = os.path.realpath(app_home_dir + "/src")
 sys.path.insert(0, app_src_dir)
 from utils.logging import log, elog
+from utils.parse import parse_isotime
 
-# ignore errors (such as the tale we're trying to delete does not exist)
-def tryexec(con, cmd, *args):
+# ignore sql operational errors (table already exists / does not exist)
+def ignore_operational(con, cmd, *args):
     try:
         con.execute(cmd, *args)
     except sqlite3.OperationalError:
         pass
 
+# ignore integrity error (entry already exists)
+def ignore_integrity(con, cmd, *args):
+    try:
+        con.execute(cmd, *args)
+    except sqlite3.IntegrityError:
+        pass
+
 def delete_indices(con):
-    tryexec(con, "DROP INDEX star_repo");
+    ignore_operational(con, "DROP INDEX star_repo");
 
 def drop_tables(con):
-    tryexec(con, "DROP TABLE repo"); # TODO
-    tryexec(con, "DROP TABLE repositories"); # TODO
+    ignore_operational(con, "DROP TABLE repo");
+    ignore_operational(con, "DROP TABLE repository");
+    ignore_operational(con, "DROP TABLE user");
+    ignore_operational(con, "DROP TABLE user_name");
+    ignore_operational(con, "DROP TABLE contributor");
 
 # for testing purposes, make sure to remove all results of the last run
 def reset_database(con):
@@ -32,14 +43,26 @@ def reset_database(con):
 
 # create all the nessessary tables
 def setup_db(con):
-    tryexec(con, '''CREATE TABLE repo (
+    ignore_operational(con, '''CREATE TABLE repo (
         id integer PRIMARY KEY AUTOINCREMENT,
         repoID integer,
         owner text,
         name text,
         creation_date
         )''')
-    tryexec(con, """
+    ignore_operational(con, '''CREATE TABLE user (
+        id integer PRIMARY KEY,
+        first_encounter text
+        )''')
+    ignore_operational(con, '''CREATE TABLE user_name (
+        id integer,
+        name text,
+        first_encounter text,
+        primary key (id, name)
+        )''')
+        # first_encounter text # TODO
+    # TODO use the functions in the database dir for this
+    ignore_operational(con, """
         CREATE TABLE repository (
             repositoryID integer,
             timestamp integer,
@@ -60,9 +83,26 @@ def setup_db(con):
             reserve1 integer,
             reserve2 text
         )""")
-    tryexec(con, "CREATE INDEX repo_id on repository(repositoryID)")
-    log("creating index on starrings")
-    # spend a few (~10) minutes on creating an index once instead of linearly searching for every repo
+    ignore_operational(con, """
+        CREATE TABLE contributor (
+            contributorID integer,
+            timestamp integer,
+            repos_started_count integer,
+            repos_forked_count integer,
+            code_pushed_count integer,
+            pull_request_created_count integer,
+            pull_request_reviewed_count integer,
+            issue_created_count integer,
+            issue_resolved_count integer,
+            issue_commented_count integer,
+            issue_other_activity_count integer,
+            owned_repos_starts_count integer,
+            reserve1 integer,
+            reserve2 text
+        )""")
+    # TODO probably better to create this index after all the insertions, as creating it once should
+    # be faster than updating it all the time
+    # ignore_operational(con, "CREATE INDEX repo_id on repository(repositoryID)")
 
 def initialize_repo_table(con):
     con.execute('''INSERT INTO repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time FROM repo_creations''')
@@ -70,11 +110,8 @@ def initialize_repo_table(con):
 def create_indices(con, tables):
     for table in tables:
         log("Creating indices on {}".format(table))
-        tryexec(con, "CREATE INDEX {0}_fullname on {0}(repo_owner_name, repo_name)".format(table));
-        tryexec(con, "CREATE INDEX {0}_time on {0}(time)".format(table));
-
-def parse_isotime(isostr): # TODO util
-    return datetime.strptime(isostr, "%Y-%m-%dT%H:%M:%S")
+        ignore_operational(con, "CREATE INDEX {0}_fullname on {0}(repo_owner_name, repo_name)".format(table));
+        ignore_operational(con, "CREATE INDEX {0}_time on {0}(time)".format(table));
 
 # finds the time of the last event recorded
 def find_stoptime(con, tables):
@@ -85,32 +122,131 @@ def find_stoptime(con, tables):
             stop = last
     return stop
 
-# create all the entries in the repository table
-def aggregate_repository(con, stoptime):
-    from datetime import timedelta
-    offset = timedelta(days = 7)
-    for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo"):
-        cur_week = datetime.strptime(creation_date, "%Y-%m-%dT%H:%M:%S")
+def count_repo_event(con, time_start, time_end, owner, name, event):
+    return con.execute("""
+        SELECT count(*)
+        FROM {}
+        WHERE repo_owner_name = ?
+          AND repo_name = ?
+          AND time >= ? AND time < ?
+    """.format(event), (owner, name, time_start, time_end)).fetchone()[0]
+
+def count_contributor_event(con, time_start, time_end, actor_id, event):
+    return con.execute("""
+        SELECT count(*)
+        FROM {}
+        WHERE actor_id = ?
+          AND time >= ? AND time < ?
+    """.format(event), (actor_id, time_start, time_end)).fetchone()[0]
+
+# create all the entries in the contributor table
+def aggregate_contributor(con, stoptime, offset):
+    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user"):
+        # TODO consider different aliases at different times (instead of only id)
+        # TODO evaluate for which times a Null in the actor_id field actually occurs in relation with when renaming was introduced
+        cur_week = parse_isotime(first_encounter)
+        cur_week_iso = cur_week.isoformat()
         while cur_week < stoptime:
             next_week = cur_week + offset
-            star_count = con.execute("""
-                SELECT count(*)
-                FROM starrings
-                WHERE repo_owner_name = ?
-                  AND repo_name = ?
-                  AND time BETWEEN ? AND ?
-            """, (owner, name, cur_week.isoformat(), next_week.isoformat())).fetchone()[0]
-            con.execute("INSERT INTO repository VALUES (?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)", (
-                id,
-                cur_week.isoformat(),
-                star_count
+            next_week_iso = next_week.isoformat()
+
+            repos_forked_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            code_pushed_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pushes")
+            pull_request_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pr_opens")
+            pull_request_reviewed_count = None # TODO count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            issue_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_opens")
+            issue_resolved_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_close")
+            issue_commented_count = None # TODO count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            issue_other_activity_count = None # TODO count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            owned_repos_starts_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            repos_started_count = owned_repos_starts_count + repos_forked_count # TODO is this right?
+
+            con.execute("INSERT INTO contributor VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
+                user_id,
+                cur_week,
+                repos_started_count,
+                repos_forked_count,
+                code_pushed_count,
+                pull_request_created_count,
+                pull_request_reviewed_count,
+                issue_created_count,
+                issue_resolved_count,
+                issue_commented_count,
+                issue_other_activity_count,
+                owned_repos_starts_count
             )) # TODO make clear that id is *not* githubs repo id
             cur_week = next_week
-        # TODO
+            cur_week_iso = next_week_iso
+
+def initialize_user_table(con, tables):
+    sources = 'SELECT id, actor_id, actor_name, time FROM {}'.format(tables[0])
+    # All actors ever encountered
+    for table in tables[1:]:
+        sources = sources + """
+        UNION
+        SELECT id, actor_id, actor_name, time FROM {}
+        """.format(table)
+
+    # Put all actors into a single table, map their names to them
+    for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, min(time) FROM ({}) GROUP BY actor_id, actor_name".format(sources)):
+        if actor_id is not None:
+            ignore_integrity(con, "INSERT INTO user VALUES (?, ?)", (actor_id, first_encounter))
+            ignore_integrity(con, "INSERT INTO user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
+        elif actor_name is not None:
+            ignore_integrity(con, "INSERT INTO user_name VALUES (1337, ?, ?)", (actor_name, first_encounter)) # TODO analyze
+        else:
+            elog("All none")
+
+# create all the entries in the repository table
+def aggregate_repository(con, stoptime, offset):
+    for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo"):
+        cur_week = parse_isotime(creation_date)
+        cur_week_iso = cur_week.isoformat()
+        while cur_week < stoptime:
+            next_week = cur_week + offset
+            next_week_iso = next_week.isoformat()
+            star_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "starrings")
+            # TODO gather all contributors, outsource the classification
+            total_contributor_count = 0
+            contributor_type1_count = None
+            contributor_type2_count = None
+            contributor_type3_count = None
+            contributor_type4_count = None
+            contributor_type5_count = None
+            code_push_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pushes") # TODO should this count individual commits instead?
+            pull_request_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pr_opens")
+            fork_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "forks")
+            release_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "releases")
+            all_issues_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_opens")
+            resolved_issue_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_close")
+            active_issues_count = all_issues_count - resolved_issue_count
+            # TODO what is org activity?
+            org_activity_count = 0 # TODO
+
+            con.execute("INSERT INTO repository VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
+                id,
+                cur_week_iso,
+                star_count,
+                total_contributor_count,
+                contributor_type1_count,
+                contributor_type2_count,
+                contributor_type3_count,
+                contributor_type4_count,
+                contributor_type5_count,
+                code_push_count,
+                pull_request_count,
+                fork_count,
+                release_count,
+                active_issues_count,
+                resolved_issue_count,
+                org_activity_count
+            )) # TODO make clear that id is *not* githubs repo id
+            cur_week = next_week
+            cur_week_iso = next_week_iso
 
 # move from intermediate parsed database to the aggregated format
 def aggregate_data(database_file):
-    timed_events = [
+    std_tables = [
         'starrings',
         'publications',
         'repo_creations',
@@ -136,15 +272,20 @@ def aggregate_data(database_file):
     log("setting up the necessary tables")
     setup_db(con);
     log("setting up the indices")
-    create_indices(con, timed_events)
+    create_indices(con, std_tables)
     log("finding the last event")
-    stoptime = find_stoptime(con, timed_events)
+    stoptime = find_stoptime(con, std_tables)
+    offset = timedelta(days = 7)
 
     log("aggregating data")
+    log("initializing users table")
+    initialize_user_table(con, std_tables)
+    log("aggregating contributors")
+    aggregate_contributor(con, stoptime, offset)
     log("initializing repositories table")
     initialize_repo_table(con)
     log("aggregating repositories")
-    aggregate_repository(con, stoptime)
+    aggregate_repository(con, stoptime, offset)
     con.commit()
     con.close()
 

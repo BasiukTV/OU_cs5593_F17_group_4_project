@@ -14,6 +14,7 @@ app_src_dir = os.path.realpath(app_home_dir + "/src")
 sys.path.insert(0, app_src_dir)
 
 from utils.logging import log, elog
+from utils.parse import parse_isotime
 
 DEFAULT_INPUT_DIRECTORY = "/input/data/raw"; # Relative to home directory of the application
 DEFAULT_INPUT_FILENAME_PATTERN = "YYYY-MM-DD-HH[-LABEL].json";
@@ -38,7 +39,8 @@ def setup_db_scheme(cur):
         repo_owner_name text,
         repo_owner_id integer,
         time text,
-        actor_id integer
+        actor_id integer,
+        actor_name integer
     '''
     cur.execute('''
         CREATE TABLE starrings (
@@ -237,12 +239,18 @@ def process_file(path_to_file_and_database):
                 if event_time[-1] == 'Z':
                     event_time = event_time[:-1]
                 else:
-                    tmp = datetime.strptime(event_time[:-6], "%Y-%m-%dT%H:%M:%S")
+                    tmp = parse_isotime(event_time[:-6])
                     offset = datetime.strptime(event_time[-6:-3] + event_time[-2:], "%z")
                     event_time = (tmp - offset.utcoffset()).isoformat()
                 actor = obj.get("actor", {})
                 # old records store just the name of the actor with a seperate actor_attributes field (which doesn't contain the id either)
-                actor_id = actor.get("id") if isinstance(actor, dict) else None
+                if isinstance(actor, dict):
+                    actor_id = actor.get("id")
+                    actor_name = actor.get("login")
+                else:
+                    actor_id = None
+                    actor_name = actor
+
                 # For some reason, the repo might be specified in either format ("repo" or "repository").
                 # This even happens in newer records.
                 repo = obj.get("repository") or obj.get("repo") or {}
@@ -265,34 +273,34 @@ def process_file(path_to_file_and_database):
                     repo_owner_name = repo_owner
                 repo_id = repo.get("id")
 
-                std = (None, event_id, repo_id, repo_name, repo_owner_name, repo_owner_id, event_time, actor_id) # relevant attributes every event has
+                std = (None, event_id, repo_id, repo_name, repo_owner_name, repo_owner_id, event_time, actor_id, actor_name) # relevant attributes every event has
 
                 if event_type == "WatchEvent":
-                    cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std)
+                    cur.execute("INSERT INTO starrings VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std)
                 elif event_type == "CreateEvent":
                     # TODO seperate different create events
                     description = payload.get("description") # can be None
                     description_len = None if description is None else len(description)
                     t = payload.get("ref_type") or payload.get("object") # object is old format
                     if t == "branch":
-                        cur.execute("INSERT INTO branch_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO branch_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             description_len,
                             payload.get("pusher_type")
                         ))
                     elif t == "tag":
-                        cur.execute("INSERT INTO tag_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO tag_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             description_len,
                             payload.get("pusher_type")
                         ))
                     elif t == "repository":
-                        cur.execute("INSERT INTO repo_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO repo_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             description_len,
                             payload.get("pusher_type")
                         ))
                     else:
                         elog("Malformed CreateEvent: {}".format(json.dumps(obj)))
                 elif event_type == "PushEvent":
-                    cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std)
+                    cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std)
                     commits = payload.get("commits")
                     if commits is None:
                         # old format
@@ -309,7 +317,7 @@ def process_file(path_to_file_and_database):
                             cur.execute("INSERT INTO commits VALUES(?, ?, ?, ?)", (event_id, commit.get("author").get("name"), commit.get("message"), commit.get("distinct")))
                 elif event_type == "ReleaseEvent":
                     release = payload["release"]
-                    cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (release.get("tag_name"), release.get("name"), release.get("prerelease"), len(release.get("assets"))))
+                    cur.execute("INSERT INTO releases VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (release.get("tag_name"), release.get("name"), release.get("prerelease"), len(release.get("assets"))))
                 elif event_type == "PullRequestEvent":
                     pr = payload.get("pull_request")
                     a = payload.get("action")
@@ -322,14 +330,14 @@ def process_file(path_to_file_and_database):
                     if a == "opened":
                         body = pr.get("body") # can be None TODO Payload?
                         body_len = None if body is None else len(body)
-                        cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO pr_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             pr.get("id"),
                             pr.get("title"),
                             body_len,
                         ))
                     elif a == "closed":
                         merged = pr.get("merged") # if false, pr was discarded. May be None in old events.
-                        cur.execute("INSERT INTO pr_close VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO pr_close VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             pr.get("id"),
                             merged
                         ))
@@ -341,7 +349,7 @@ def process_file(path_to_file_and_database):
                             # new format
                             body = issue.get("body")
                             body_len = None if body is None else len(body)
-                            cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                                 issue.get("id"),
                                 issue.get("title"),
                                 len(issue.get("labels")),
@@ -349,7 +357,7 @@ def process_file(path_to_file_and_database):
                                 body_len
                             ))
                         else:
-                            cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                                 issue,
                                 None, # no title provided
                                 None, # no labels either
@@ -358,35 +366,35 @@ def process_file(path_to_file_and_database):
                             ))
                     elif a == "closed":
                         issue_id = issue.get("id") if isinstance(issue, dict) else issue
-                        cur.execute("INSERT INTO issue_close VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO issue_close VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             issue_id,
                         ))
                 elif event_type == "CommitCommentEvent":
                     comment = payload.get("comment")
                     if comment is not None:
                         # new format
-                        cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             comment.get("id"),
                             comment.get("commit_id"),
                             len(comment.get("body")),
                         ))
                     else:
                         # old format
-                        cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO commit_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             payload.get("comment_id"),
                             payload.get("commit"),
                             None, # no body provided
                         ))
                 elif event_type == "DeleteEvent":
                     ref_type = payload.get("ref_type")
-                    cur.execute("INSERT INTO deletes VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                    cur.execute("INSERT INTO deletes VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                         ref_type,
                     ))
                 elif event_type == "ForkEvent":
                     # old vs new format
                     forkee = payload.get("forkee")
                     forkee_id = forkee.get("id") if isinstance(forkee, dict) else forkee
-                    cur.execute("INSERT INTO forks VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                    cur.execute("INSERT INTO forks VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                         forkee_id,
                     ))
                 elif event_type == "GollumEvent":
@@ -394,13 +402,13 @@ def process_file(path_to_file_and_database):
                     pages = payload.get("pages")
                     if pages is None:
                         # old format: just one page, directly in payload
-                        cur.execute("INSERT INTO wiki_events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO wiki_events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             payload.get("action"),
                         ))
                     else:
                         # new format: multiple pages possible
                         for page in payload.get("pages"):
-                            cur.execute("INSERT INTO wiki_events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            cur.execute("INSERT INTO wiki_events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                                 page.get("action"),
                             ))
                 elif event_type == "IssueCommentEvent":
@@ -408,31 +416,31 @@ def process_file(path_to_file_and_database):
                     if isinstance(issue, dict):
                         # new format
                         comment = payload.get("comment")
-                        cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             issue.get("id"),
                             comment.get("commit_id"),
                             len(comment.get("body")),
                         ))
                     else:
                         # old format
-                        cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             payload.get("issue_id"),
                             payload.get("comment_id"),
                             None, # no body provided
                         ))
                 elif event_type == "MemberEvent":
                     member = payload.get("member")
-                    cur.execute("INSERT INTO member_events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                    cur.execute("INSERT INTO member_events VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                         # TODO in old format, member is the name
                         member.get("id") if isinstance(member, dict) else None,
                         payload.get("action"),
                     ))
                 elif event_type == "PublicEvent":
-                    cur.execute("INSERT INTO publications VALUES(?, ?, ?, ?, ?, ?, ?, ?)", std)
+                    cur.execute("INSERT INTO publications VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std)
                 elif event_type == "PullRequestReviewCommentEvent":
                     pr = payload.get("pull_request")
                     comment = payload.get("comment")
-                    cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                    cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                         # TODO there is no pr id in the old format, but you can get the pr number indirectly
                         # through the pull request link (["_links"]["pull_request""])
                         # That can then lead to the pr id
