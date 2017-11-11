@@ -17,29 +17,15 @@ sys.path.insert(0, app_src_dir)
 from utils.logging import log, elog
 from utils.parse import parse_isotime
 
-# ignore sql operational errors (table already exists / does not exist)
-def ignore_operational(con, cmd, *args):
-    try:
-        con.execute(cmd, *args)
-    except sqlite3.OperationalError:
-        pass
-
-# ignore integrity error (entry already exists)
-def ignore_integrity(con, cmd, *args):
-    try:
-        con.execute(cmd, *args)
-    except sqlite3.IntegrityError:
-        pass
-
 def delete_indices(con):
-    ignore_operational(con, "DROP INDEX star_repo");
+    con.execute("DROP INDEX IF EXISTS star_repo");
 
 def drop_tables(con):
-    ignore_operational(con, "DROP TABLE repo");
-    ignore_operational(con, "DROP TABLE repository");
-    ignore_operational(con, "DROP TABLE user");
-    ignore_operational(con, "DROP TABLE user_name");
-    ignore_operational(con, "DROP TABLE contributor");
+    con.execute("DROP TABLE IF EXISTS repo");
+    con.execute("DROP TABLE IF EXISTS repository");
+    con.execute("DROP TABLE IF EXISTS user");
+    con.execute("DROP TABLE IF EXISTS user_name");
+    con.execute("DROP TABLE IF EXISTS contributor");
 
 # for testing purposes, make sure to remove all results of the last run
 def reset_database(con):
@@ -48,26 +34,26 @@ def reset_database(con):
 
 # create all the nessessary tables
 def setup_db(con):
-    ignore_operational(con, '''CREATE TABLE repo (
+    con.execute('''CREATE TABLE IF NOT EXISTS repo (
         id integer PRIMARY KEY AUTOINCREMENT,
         repoID integer,
         owner text,
         name text,
         creation_date
         )''')
-    ignore_operational(con, '''CREATE TABLE user (
+    con.execute('''CREATE TABLE IF NOT EXISTS user (
         id integer PRIMARY KEY,
         first_encounter text
         )''')
-    ignore_operational(con, '''CREATE TABLE user_name (
+    con.execute('''CREATE TABLE IF NOT EXISTS user_name (
         id integer,
         name text,
         first_encounter text,
         primary key (id, name)
         )''')
     # TODO use the functions in the database dir for this
-    ignore_operational(con, """
-        CREATE TABLE repository (
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS repository (
             repositoryID integer,
             timestamp integer,
             star_count integer,
@@ -87,8 +73,8 @@ def setup_db(con):
             reserve1 integer,
             reserve2 text
         )""")
-    ignore_operational(con, """
-        CREATE TABLE contributor (
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS contributor (
             contributorID integer,
             timestamp integer,
             repos_started_count integer,
@@ -106,7 +92,7 @@ def setup_db(con):
         )""")
     # TODO probably better to create this index after all the insertions, as creating it once should
     # be faster than updating it all the time
-    # ignore_operational(con, "CREATE INDEX repo_id on repository(repositoryID)")
+    # con.execute("CREATE INDEX IF NOT EXISTS repo_id on repository(repositoryID)")
 
 def initialize_repo_table(con):
     con.execute('''INSERT INTO repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time FROM repo_creations''')
@@ -114,9 +100,9 @@ def initialize_repo_table(con):
 def create_indices(con, tables):
     for table in tables:
         log("Creating indices on {}".format(table))
-        ignore_operational(con, "CREATE INDEX {0}_fullname on {0}(repo_owner_name, repo_name)".format(table));
-        ignore_operational(con, "CREATE INDEX {0}_actor on {0}(actor_id)".format(table));
-        ignore_operational(con, "CREATE INDEX {0}_time on {0}(time)".format(table));
+        con.execute("CREATE INDEX IF NOT EXISTS {0}_fullname on {0}(repo_owner_name, repo_name)".format(table));
+        con.execute("CREATE INDEX IF NOT EXISTS {0}_actor on {0}(actor_id)".format(table));
+        con.execute("CREATE INDEX IF NOT EXISTS {0}_time on {0}(time)".format(table));
 
 # finds the time of the last event recorded
 def find_stoptime(con, tables):
@@ -209,10 +195,10 @@ def initialize_user_table(con, tables):
     # Put all actors into a single table, map their names to them
     for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, min(time) FROM ({}) GROUP BY actor_id, actor_name".format(sources)):
         if actor_id is not None:
-            ignore_integrity(con, "INSERT INTO user VALUES (?, ?)", (actor_id, first_encounter))
-            ignore_integrity(con, "INSERT INTO user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
+            con.execute("INSERT OR IGNORE INTO user VALUES (?, ?)", (actor_id, first_encounter))
+            con.execute("INSERT OR IGNORE INTO user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
         elif actor_name is not None:
-            ignore_integrity(con, "INSERT INTO user_name VALUES (-1, ?, ?)", (actor_name, first_encounter)) # TODO analyze
+            con.execute("INSERT OR IGNORE INTO user_name VALUES (-1, ?, ?)", (actor_name, first_encounter)) # TODO analyze
             # 5618 don't appear elsewhere, 5712 do
             # given 1,069,793 total users
         else:
