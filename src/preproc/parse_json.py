@@ -48,6 +48,16 @@ def setup_db_scheme(cur):
         )
     '''.format(common_attrs))
     cur.execute('''
+        CREATE TABLE milestone_misc (
+            {},
+            milestone_id integer,
+            title_len integer,
+            description_len integer,
+            creator_id integer,
+            action text
+        )
+    '''.format(common_attrs))
+    cur.execute('''
         CREATE TABLE publications (
             {}
         )
@@ -121,9 +131,23 @@ def setup_db_scheme(cur):
         )
     '''.format(common_attrs))
     cur.execute('''
+        CREATE TABLE pr_misc (
+            {},
+            pr_id integer,
+            event text
+        )
+    '''.format(common_attrs))
+    cur.execute('''
         CREATE TABLE issue_close (
             {},
             issue_id integer
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE issue_misc (
+            {},
+            issue_id integer,
+            event text
         )
     '''.format(common_attrs))
     cur.execute('''
@@ -143,6 +167,23 @@ def setup_db_scheme(cur):
             {},
             issue_id integer,
             comment_id integer,
+            body_len integer
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE pr_review (
+            {},
+            pr_id integer,
+            review_id integer,
+            body_len integer,
+            action text
+        )
+    '''.format(common_attrs))
+    cur.execute('''
+        CREATE TABLE pr_review_comment (
+            {},
+            pr_id integer,
+            review_id integer,
             body_len integer
         )
     '''.format(common_attrs))
@@ -224,6 +265,7 @@ def preprocess_files(files, threads_num, output_file_path):
 def process_file(path_to_file_and_database):
     (path_to_file, path_to_database) = path_to_file_and_database
     db = sqlite3.connect(path_to_database)
+    # db = sqlite3.connect(':memory:') # TODO
     cur = db.cursor()
     log("Processing {}", path_to_file)
 
@@ -292,13 +334,14 @@ def process_file(path_to_file_and_database):
                             description_len,
                             payload.get("pusher_type")
                         ))
+                        # TODO
                     elif t == "repository":
                         cur.execute("INSERT INTO repo_creations VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             description_len,
                             payload.get("pusher_type")
                         ))
                     else:
-                        elog("Malformed CreateEvent: {}".format(json.dumps(obj)))
+                        elog("Malformed CreateEvent: {}", json.dumps(obj))
                 elif event_type == "PushEvent":
                     cur.execute("INSERT INTO pushes VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std)
                     commits = payload.get("commits")
@@ -341,33 +384,67 @@ def process_file(path_to_file_and_database):
                             pr.get("id"),
                             merged
                         ))
+                    else:
+                        cur.execute("INSERT INTO pr_misc VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            pr.get("id"),
+                            a
+                        ))
+                # TODO decide wether to use this and add more details if yes
+                elif event_type == "MilestoneEvent":
+                    milestone = payload.get("milestone")
+                    milestone_id = milestone.get("id")
+                    title_len = len(milestone.get("title"))
+                    description_len = len(milestone.get("description", ""))
+                    creator_id = len(milestone.get("creator").get("id"))
+                    action = payload.get("action")
+                    cur.execute("INSERT INTO milestone_misc VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        milestone_id,
+                        title_len,
+                        description_len,
+                        creator_id,
+                        action
+                    ))
                 elif event_type == "IssuesEvent":
                     issue = payload.get("issue")
                     a = payload.get("action")
+                    if isinstance(issue, dict):
+                        issue_id = issue.get("id") if isinstance(issue, dict) else issue
+                        body = issue.get("body")
+                        body_len = None if body is None else len(body)
+                        title = issue.get("title")
+                        label_len = len(issue.get("labels"))
+                        milestone_id = (issue.get("milestone") or {}).get("id")
+                    else:
+                        issue_id = issue
+                        body_len = None
+                        title = None
+                        label_len = None
+                        milestone_id = None
                     if a == "opened":
                         if isinstance(issue, dict):
-                            # new format
-                            body = issue.get("body")
-                            body_len = None if body is None else len(body)
                             cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                                issue.get("id"),
-                                issue.get("title"),
-                                len(issue.get("labels")),
-                                (issue.get("milestone") or {}).get("id"),
+                                issue_id,
+                                title,
+                                label_len,
+                                milestone_id,
                                 body_len
                             ))
                         else:
                             cur.execute("INSERT INTO issue_opens VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
-                                issue,
-                                None, # no title provided
-                                None, # no labels either
-                                None, # no milestones
-                                None, # no body
+                                issue_id,
+                                title,
+                                label_len,
+                                milestone_id,
+                                body_len
                             ))
                     elif a == "closed":
-                        issue_id = issue.get("id") if isinstance(issue, dict) else issue
                         cur.execute("INSERT INTO issue_close VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                             issue_id,
+                        ))
+                    else:
+                        cur.execute("INSERT INTO issue_misc VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                            issue_id,
+                            a
                         ))
                 elif event_type == "CommitCommentEvent":
                     comment = payload.get("comment")
@@ -437,15 +514,29 @@ def process_file(path_to_file_and_database):
                     ))
                 elif event_type == "PublicEvent":
                     cur.execute("INSERT INTO publications VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", std)
-                elif event_type == "PullRequestReviewCommentEvent":
+                # TODO this event apparently never occurs?
+                # Verify this on the whole dataset.
+                elif event_type == "PullRequestReviewEvent":
                     pr = payload.get("pull_request")
-                    comment = payload.get("comment")
-                    cur.execute("INSERT INTO issue_comments VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                    review = payload.get("review")
+                    cur.execute("INSERT INTO pr_review VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
                         # TODO there is no pr id in the old format, but you can get the pr number indirectly
                         # through the pull request link (["_links"]["pull_request""])
                         # That can then lead to the pr id
                         None if pr is None else pr.get("id"),
-                        comment.get("commit_id"),
+                        review.get("id"),
+                        len(review.get("body")),
+                        payload.get("action")
+                    ))
+                elif event_type == "PullRequestReviewCommentEvent":
+                    pr = payload.get("pull_request")
+                    comment = payload.get("comment")
+                    cur.execute("INSERT INTO pr_review_comment VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", std + (
+                        # TODO there is no pr id in the old format, but you can get the pr number indirectly
+                        # through the pull request link (["_links"]["pull_request""])
+                        # That can then lead to the pr id
+                        None if pr is None else pr.get("id"),
+                        comment.get("id"),
                         len(comment.get("body")),
                     ))
             except Exception as e:
@@ -455,8 +546,7 @@ def process_file(path_to_file_and_database):
     db.commit()
     db.close()
 
-# Entry point for running the json parsing step separately
-if __name__ == "__main__":
+def main():
     import argparse
 
     # Configuring CLI arguments parser and parsing the arguments
@@ -510,3 +600,8 @@ if __name__ == "__main__":
     log("Using Number Of Threads: {}", args.threads)
 
     preprocess_files(input_files, int(args.threads), output_filename_path)
+
+# Entry point for running the json parsing step separately
+if __name__ == "__main__":
+    import cProfile
+    cProfile.run('main()')

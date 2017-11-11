@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+
+# TODO use TagEvents?
+# TODO performance analysis
+# TODO test performance impact of generic event table
 import sqlite3
 import io
 import os
@@ -60,7 +65,6 @@ def setup_db(con):
         first_encounter text,
         primary key (id, name)
         )''')
-        # first_encounter text # TODO
     # TODO use the functions in the database dir for this
     ignore_operational(con, """
         CREATE TABLE repository (
@@ -111,15 +115,18 @@ def create_indices(con, tables):
     for table in tables:
         log("Creating indices on {}".format(table))
         ignore_operational(con, "CREATE INDEX {0}_fullname on {0}(repo_owner_name, repo_name)".format(table));
+        ignore_operational(con, "CREATE INDEX {0}_actor on {0}(actor_id)".format(table));
         ignore_operational(con, "CREATE INDEX {0}_time on {0}(time)".format(table));
 
 # finds the time of the last event recorded
 def find_stoptime(con, tables):
     stop = datetime.fromtimestamp(0)
     for table in tables:
-        last = parse_isotime(con.execute("SELECT max(time) FROM {}".format(table)).fetchone()[0])
-        if last > stop:
-            stop = last
+        last = con.execute("SELECT max(time) FROM {}".format(table)).fetchone()[0]
+        if last is not None:
+            last = parse_isotime(last)
+            if last > stop:
+                stop = last
     return stop
 
 def count_repo_event(con, time_start, time_end, owner, name, event):
@@ -136,11 +143,17 @@ def count_contributor_event(con, time_start, time_end, actor_id, event):
         SELECT count(*)
         FROM {}
         WHERE actor_id = ?
-          AND time >= ? AND time < ?
+          AND time between ? AND ?
     """.format(event), (actor_id, time_start, time_end)).fetchone()[0]
+    # TODO measure performance impact of between vs manual range, make range exclusve
 
 # create all the entries in the contributor table
 def aggregate_contributor(con, stoptime, offset):
+    log("Before count")
+    contributor_count = con.execute("SELECT count(*) FROM user").fetchone()[0]
+    log("After count")
+    finished_with = 0
+
     for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user"):
         # TODO consider different aliases at different times (instead of only id)
         # TODO evaluate for which times a Null in the actor_id field actually occurs in relation with when renaming was introduced
@@ -150,14 +163,15 @@ def aggregate_contributor(con, stoptime, offset):
             next_week = cur_week + offset
             next_week_iso = next_week.isoformat()
 
-            repos_forked_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            repos_forked_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "forks")
             code_pushed_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pushes")
             pull_request_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pr_opens")
-            pull_request_reviewed_count = None # TODO count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            pull_request_reviewed_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pr_review_comment")
             issue_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_opens")
             issue_resolved_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_close")
-            issue_commented_count = None # TODO count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
-            issue_other_activity_count = None # TODO count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            issue_commented_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_comments")
+            # TODO analyze since when those are around
+            issue_other_activity_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_misc")
             owned_repos_starts_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
             repos_started_count = owned_repos_starts_count + repos_forked_count # TODO is this right?
 
@@ -174,9 +188,14 @@ def aggregate_contributor(con, stoptime, offset):
                 issue_commented_count,
                 issue_other_activity_count,
                 owned_repos_starts_count
-            )) # TODO make clear that id is *not* githubs repo id
+            ))
             cur_week = next_week
             cur_week_iso = next_week_iso
+
+        # status report
+        finished_with += 1
+        if finished_with % 1000 == 0:
+            elog("Finished with {}/{} contributors".format(finished_with, contributor_count))
 
 def initialize_user_table(con, tables):
     sources = 'SELECT id, actor_id, actor_name, time FROM {}'.format(tables[0])
@@ -193,12 +212,19 @@ def initialize_user_table(con, tables):
             ignore_integrity(con, "INSERT INTO user VALUES (?, ?)", (actor_id, first_encounter))
             ignore_integrity(con, "INSERT INTO user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
         elif actor_name is not None:
-            ignore_integrity(con, "INSERT INTO user_name VALUES (1337, ?, ?)", (actor_name, first_encounter)) # TODO analyze
+            ignore_integrity(con, "INSERT INTO user_name VALUES (-1, ?, ?)", (actor_name, first_encounter)) # TODO analyze
+            # 5618 don't appear elsewhere, 5712 do
+            # given 1,069,793 total users
         else:
             elog("All none")
 
 # create all the entries in the repository table
 def aggregate_repository(con, stoptime, offset):
+    log("Before count")
+    repo_count = con.execute("SELECT count(*) FORM repo").fetchone()[0]
+    log("After count")
+    finished_with = 0
+
     for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo"):
         cur_week = parse_isotime(creation_date)
         cur_week_iso = cur_week.isoformat()
@@ -206,8 +232,16 @@ def aggregate_repository(con, stoptime, offset):
             next_week = cur_week + offset
             next_week_iso = next_week.isoformat()
             star_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "starrings")
-            # TODO gather all contributors, outsource the classification
-            total_contributor_count = 0
+            # TODO what is a contribution?
+            # TODO don't only consider id, but also names
+            total_contributor_count = con.execute("""
+                SELECT count(actor_id)
+                FROM pushes
+                WHERE repo_owner_name = ?
+                  AND repo_name = ?
+                  AND time >= ? AND time < ?
+            """, (owner, name, cur_week_iso, next_week_iso)).fetchone()[0]
+            # TODO outsource the classification
             contributor_type1_count = None
             contributor_type2_count = None
             contributor_type3_count = None
@@ -220,8 +254,9 @@ def aggregate_repository(con, stoptime, offset):
             all_issues_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_opens")
             resolved_issue_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_close")
             active_issues_count = all_issues_count - resolved_issue_count
-            # TODO what is org activity?
-            org_activity_count = 0 # TODO
+            org_activity_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_misc")
+            + count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pr_misc")
+            + count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "milestone_misc")
 
             con.execute("INSERT INTO repository VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
                 id,
@@ -244,6 +279,11 @@ def aggregate_repository(con, stoptime, offset):
             cur_week = next_week
             cur_week_iso = next_week_iso
 
+        # status report
+        finished_with += 1
+        if finished_with % 1000 == 0:
+            elog("Finished with {}/{} repos".format(finished_with, repo_count))
+
 # move from intermediate parsed database to the aggregated format
 def aggregate_data(database_file):
     std_tables = [
@@ -263,7 +303,11 @@ def aggregate_data(database_file):
         'issue_comments',
         'commit_comments',
         'member_events',
-        'wiki_events'
+        'wiki_events',
+        'issue_misc',
+        'pr_misc',
+        'milestone_misc',
+        'pr_review_comment',
     ]
 
     con = sqlite3.connect(database_file)
@@ -291,9 +335,7 @@ def aggregate_data(database_file):
 
 DEFAULT_DB_FILE = "/output/data/preproc/preprocessed.sqlite3"; # Relative to home directory of the application
 
-# Entry point for running the aggregation step separately
-if __name__ == "__main__":
-
+def main():
     # Configuring CLI arguments parser and parsing the arguments
     parser = argparse.ArgumentParser("Script for parsing the intermediate GitHub event database into an aggregated format.")
     parser.add_argument("-f", "--file", help="Database file (will be updated in place)")
@@ -314,3 +356,8 @@ if __name__ == "__main__":
     print("Database file is located at: {}".format(database_file))
 
     aggregate_data(database_file)
+
+# Entry point for running the aggregation step separately
+if __name__ == "__main__":
+    import cProfile
+    cProfile.run('main()')
