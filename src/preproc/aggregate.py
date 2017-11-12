@@ -207,7 +207,7 @@ def initialize_user_table(con, tables):
 # create all the entries in the repository table
 def aggregate_repository(con, stoptime, offset):
     log("Before count")
-    repo_count = con.execute("SELECT count(*) FORM repo").fetchone()[0]
+    repo_count = con.execute("SELECT count(*) FROM repo").fetchone()[0]
     log("After count")
     finished_with = 0
 
