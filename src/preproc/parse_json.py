@@ -282,7 +282,7 @@ def process_file(path_to_file_and_database):
                     event_time = event_time[:-1]
                 else:
                     tmp = parse_isotime(event_time[:-6])
-                    if event_time[-3] == '-':
+                    if event_time[-3] == ':':
                         offset_str = event_time[-6:-3] + event_time[-2:]
                     else:
                         offset_str = event_time[-5:]
