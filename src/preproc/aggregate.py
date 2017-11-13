@@ -101,7 +101,8 @@ def create_indices(con, tables):
     for table in tables:
         log("Creating indices on {}".format(table))
         con.execute("CREATE INDEX IF NOT EXISTS {0}_fullname on {0}(repo_owner_name, repo_name)".format(table));
-        con.execute("CREATE INDEX IF NOT EXISTS {0}_actor on {0}(actor_name)".format(table));
+        con.execute("CREATE INDEX IF NOT EXISTS {0}_actor_id on {0}(actor_id)".format(table));
+        con.execute("CREATE INDEX IF NOT EXISTS {0}_actor_name on {0}(actor_name)".format(table));
         con.execute("CREATE INDEX IF NOT EXISTS {0}_time on {0}(time)".format(table));
 
 # finds the time of the last event recorded
@@ -148,7 +149,7 @@ def aggregate_contributor(con, stoptime, offset):
     contributor_count = con.execute("SELECT count(*) FROM user").fetchone()[0]
     finished_with = 0
 
-    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user WHERE id in ( SELECT id FROM user_name GROUP BY id HAVING count(name) > 1 )"):
+    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user"):
         aliases = []
         for alias in con.execute("SELECT name, first_encounter FROM user_name where id = ? ORDER BY first_encounter", (user_id,)):
             aliases = aliases + [ alias ]
