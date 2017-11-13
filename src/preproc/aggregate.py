@@ -101,7 +101,7 @@ def create_indices(con, tables):
     for table in tables:
         log("Creating indices on {}".format(table))
         con.execute("CREATE INDEX IF NOT EXISTS {0}_fullname on {0}(repo_owner_name, repo_name)".format(table));
-        con.execute("CREATE INDEX IF NOT EXISTS {0}_actor on {0}(actor_id)".format(table));
+        con.execute("CREATE INDEX IF NOT EXISTS {0}_actor on {0}(actor_name)".format(table));
         con.execute("CREATE INDEX IF NOT EXISTS {0}_time on {0}(time)".format(table));
 
 # finds the time of the last event recorded
@@ -135,7 +135,8 @@ def count_contributor_event(con, time_start, time_end, aliases, event):
             SELECT count(*)
             FROM {}
             WHERE actor_name = ?
-              AND time between ? AND ?
+              AND time >= ?
+              AND time < ?
         """.format(event), (alias, alias_start, alias_end)).fetchone()[0]
         if alias_end == time_end:
             break
