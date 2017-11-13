@@ -282,7 +282,11 @@ def process_file(path_to_file_and_database):
                     event_time = event_time[:-1]
                 else:
                     tmp = parse_isotime(event_time[:-6])
-                    offset = datetime.strptime(event_time[-6:-3] + event_time[-2:], "%z")
+                    if event_time[-3] == '-':
+                        offset_str = event_time[-6:-3] + event_time[-2:]
+                    else:
+                        offset_str = event_time[-5:]
+                    offset = datetime.strptime(offset_str, "%z")
                     event_time = (tmp - offset.utcoffset()).isoformat()
                 actor = obj.get("actor", {})
                 # old records store just the name of the actor with a seperate actor_attributes field (which doesn't contain the id either)
