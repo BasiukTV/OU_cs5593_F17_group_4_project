@@ -124,23 +124,33 @@ def count_repo_event(con, time_start, time_end, owner, name, event):
           AND time >= ? AND time < ?
     """.format(event), (owner, name, time_start, time_end)).fetchone()[0]
 
-def count_contributor_event(con, time_start, time_end, actor_id, event):
-    return con.execute("""
-        SELECT count(*)
-        FROM {}
-        WHERE actor_id = ?
-          AND time between ? AND ?
-    """.format(event), (actor_id, time_start, time_end)).fetchone()[0]
+def count_contributor_event(con, time_start, time_end, aliases, event):
+    count = 0
+    aliases = aliases.copy() + [(None, time_end)]
+    for i in range (0, len(aliases) - 1):
+        alias = aliases[i][0]
+        alias_start = max(aliases[i][1], time_start)
+        alias_end = min(aliases[i + 1][1], time_end) # time when this alias will be outdated
+        count += con.execute("""
+            SELECT count(*)
+            FROM {}
+            WHERE actor_name = ?
+              AND time between ? AND ?
+        """.format(event), (alias, alias_start, alias_end)).fetchone()[0]
+        if alias_end == time_end:
+            break
     # TODO measure performance impact of between vs manual range, make range exclusve
+    return count
 
 # create all the entries in the contributor table
 def aggregate_contributor(con, stoptime, offset):
-    log("Before count")
     contributor_count = con.execute("SELECT count(*) FROM user").fetchone()[0]
-    log("After count")
     finished_with = 0
 
-    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user"):
+    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user WHERE id in ( SELECT id FROM user_name GROUP BY id HAVING count(name) > 1 )"):
+        aliases = []
+        for alias in con.execute("SELECT name, first_encounter FROM user_name where id = ? ORDER BY first_encounter", (user_id,)):
+            aliases = aliases + [ alias ]
         # TODO consider different aliases at different times (instead of only id)
         # TODO evaluate for which times a Null in the actor_id field actually occurs in relation with when renaming was introduced
         cur_week = parse_isotime(first_encounter)
@@ -149,16 +159,25 @@ def aggregate_contributor(con, stoptime, offset):
             next_week = cur_week + offset
             next_week_iso = next_week.isoformat()
 
-            repos_forked_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "forks")
-            code_pushed_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pushes")
-            pull_request_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pr_opens")
-            pull_request_reviewed_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "pr_review_comment")
-            issue_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_opens")
-            issue_resolved_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_close")
-            issue_commented_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_comments")
+            # remove all outdated aliases
+            for _ in range(0, len(aliases) - 1):
+                outdated_by = aliases[1][1]
+                name = aliases[0][0]
+                if outdated_by <= cur_week_iso:
+                    aliases.pop(0)
+                else:
+                    break
+
+            repos_forked_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "forks")
+            code_pushed_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "pushes")
+            pull_request_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "pr_opens")
+            pull_request_reviewed_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "pr_review_comment")
+            issue_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_opens")
+            issue_resolved_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_close")
+            issue_commented_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_comments")
             # TODO analyze since when those are around
-            issue_other_activity_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "issue_misc")
-            owned_repos_starts_count = count_contributor_event(con, cur_week_iso, next_week_iso, user_id, "repo_creations")
+            issue_other_activity_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_misc")
+            owned_repos_starts_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "repo_creations")
             repos_started_count = owned_repos_starts_count + repos_forked_count # TODO is this right?
 
             con.execute("INSERT INTO contributor VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
@@ -184,31 +203,38 @@ def aggregate_contributor(con, stoptime, offset):
             elog("Finished with {}/{} contributors".format(finished_with, contributor_count))
 
 def initialize_user_table(con, tables):
-    sources = 'SELECT id, actor_id, actor_name, time FROM {}'.format(tables[0])
+    sources = 'SELECT actor_id, actor_name, time FROM {}'.format(tables[0])
     # All actors ever encountered
     for table in tables[1:]:
         sources = sources + """
         UNION
-        SELECT id, actor_id, actor_name, time FROM {}
+        SELECT actor_id, actor_name, time FROM {}
         """.format(table)
+
+    unknown_ids = {};
 
     # Put all actors into a single table, map their names to them
     for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, min(time) FROM ({}) GROUP BY actor_id, actor_name".format(sources)):
         if actor_id is not None:
+            # if we already encountered the name before (just without an ID), use that as the first encounter date
+            if unknown_ids.get(actor_name) is not None:
+                first_encounter = unknown_ids.pop(actor_name)
+                con.execute("UPDATE user SET first_encounter = min(first_encounter, ?) WHERE id = ?", (first_encounter, actor_id))
+
             con.execute("INSERT OR IGNORE INTO user VALUES (?, ?)", (actor_id, first_encounter))
             con.execute("INSERT OR IGNORE INTO user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
         elif actor_name is not None:
-            con.execute("INSERT OR IGNORE INTO user_name VALUES (-1, ?, ?)", (actor_name, first_encounter)) # TODO analyze
+            unknown_ids[actor_name] = first_encounter
+            # con.execute("INSERT OR IGNORE INTO user_name VALUES (-1, ?, ?)", (actor_name, first_encounter)) # TODO analyze
             # 5618 don't appear elsewhere, 5712 do
             # given 1,069,793 total users
         else:
             elog("All none")
+    log("Remaining {} unkown ids", len(unknown_ids.keys()))
 
 # create all the entries in the repository table
 def aggregate_repository(con, stoptime, offset):
-    log("Before count")
     repo_count = con.execute("SELECT count(*) FROM repo").fetchone()[0]
-    log("After count")
     finished_with = 0
 
     for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo"):
@@ -310,10 +336,13 @@ def aggregate_data(database_file):
     log("aggregating data")
     log("initializing users table")
     initialize_user_table(con, std_tables)
+    con.commit()
     log("aggregating contributors")
     aggregate_contributor(con, stoptime, offset)
+    con.commit()
     log("initializing repositories table")
     initialize_repo_table(con)
+    con.commit()
     log("aggregating repositories")
     aggregate_repository(con, stoptime, offset)
     con.commit()
