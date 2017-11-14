@@ -82,11 +82,10 @@ def sql_writer(db_path, queue):
     db = sqlite3.connect(db_path)
     counter = 0
     while True:
-        statements = queue.get() # blocks
-        if statements is None:
+        args = queue.get() # blocks
+        if args is None:
             break
-        for (sql, args) in statements:
-            db.execute(sql, args)
+        db.executemany("INSERT INTO event VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", args)
         # db.commit()
         log("SQL backlog: {}".format(queue.qsize()))
         counter += 1
@@ -113,7 +112,7 @@ def preprocess_files(files, threads_num, output_file_path):
 
     db = EventDB(output_file_path)
 
-    queue = multiprocessing.Queue(1000)
+    queue = multiprocessing.Queue(100)
     writer = multiprocessing.Process(target=sql_writer, args = (output_file_path, queue))
     writer.start()
 
@@ -197,7 +196,7 @@ def process_file(path_to_file):
                 repo_id = repo.get("id")
 
                 # db.insert_event(event_id, repo_id, repo_name, repo_owner_name, repo_owner_id, event_time, actor_id, actor_name)
-                result.append(("INSERT INTO event VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", (None, event_id, repo_id, repo_name, repo_owner_name, repo_owner_id, event_time, actor_id, actor_name)))
+                result.append((None, event_id, repo_id, repo_name, repo_owner_name, repo_owner_id, event_time, actor_id, actor_name))
 
             except Exception as e:
                 elog("Error while processing line {} of {} (type {}):\n{}", lineno, path_to_file, obj.get("type"), e)

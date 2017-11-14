@@ -1,11 +1,11 @@
 #!/bin/bash
 #
 #SBATCH --partition=normal
-#SBATCH --ntasks=50
+#SBATCH --cpus-per-task=15
 #SBATCH --mem=4096
 #SBATCH --output=parsed-%J/out.log
 #SBATCH --error=parsed-%J/err.log
-#SBATCH --time=24:00:00
+#SBATCH --time=01:00:00
 #SBATCH --job-name=github-processing
 #SBATCH --mail-user=timo.kaufmann@ou.edu
 #SBATCH --mail-type=ALL
@@ -20,4 +20,4 @@ module load Python/3.5.1-intel-2016a
 python3 /home/timo/repo/src/preproc/parse_json.py \
 	--indir "${indir}" \
 	--outdir "${outdir}" \
-	--threads ${SLURM_NTASKS}
+	--threads ${SLURM_CPUS_PER_TASK}
