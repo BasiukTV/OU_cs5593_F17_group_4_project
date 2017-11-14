@@ -78,20 +78,22 @@ DEFAULT_THREADS_NUMBER = 5;
 # Process files in one week of worth data batches. Assuming one file holds an hour worth of data.
 DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
 
+QUEUE_SIZE = 1000
+
 def sql_writer(db_path, queue):
     db = sqlite3.connect(db_path)
     counter = 0
     while True:
+        full = queue.full()
         args = queue.get() # blocks
         if args is None:
             break
+        if full:
+            for _ in range(QUEUE_SIZE // 2):
+                args += queue.get()
         db.executemany("INSERT INTO event VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", args)
-        # db.commit()
+        db.commit()
         log("SQL backlog: {}".format(queue.qsize()))
-        counter += 1
-        if counter > 100:
-            db.commit()
-    db.commit()
     db.close()
     log("Finished all writing")
 
@@ -112,7 +114,7 @@ def preprocess_files(files, threads_num, output_file_path):
 
     db = EventDB(output_file_path)
 
-    queue = multiprocessing.Queue(100)
+    queue = multiprocessing.Queue(QUEUE_SIZE)
     writer = multiprocessing.Process(target=sql_writer, args = (output_file_path, queue))
     writer.start()
 
