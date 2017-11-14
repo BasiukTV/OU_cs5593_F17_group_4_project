@@ -377,5 +377,6 @@ def main():
 
 # Entry point for running the aggregation step separately
 if __name__ == "__main__":
-    import cProfile
-    cProfile.run('main()')
+    # import cProfile
+    # cProfile.run('main()')
+    main()
