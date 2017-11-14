@@ -3,8 +3,8 @@
 #SBATCH --partition=normal
 #SBATCH --cpus-per-task=15
 #SBATCH --mem=4096
-#SBATCH --output=parsed-%J/out.log
-#SBATCH --error=parsed-%J/err.log
+#SBATCH --output=out-%J.log
+#SBATCH --error=err-%J.log
 #SBATCH --time=01:00:00
 #SBATCH --job-name=github-processing
 #SBATCH --mail-user=timo.kaufmann@ou.edu
