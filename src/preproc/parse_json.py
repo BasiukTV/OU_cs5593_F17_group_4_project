@@ -80,16 +80,21 @@ DEFAULT_FILE_PREPROCESSING_BATCH_SIZE = 7 * 24;
 
 def sql_writer(db_path, queue):
     db = sqlite3.connect(db_path)
+    counter = 0
     while True:
         statements = queue.get() # blocks
         if statements is None:
             break
         for (sql, args) in statements:
             db.execute(sql, args)
-        db.commit()
-        print("SQL backlog: {}".format(queue.qsize()))
+        # db.commit()
+        log("SQL backlog: {}".format(queue.qsize()))
+        counter += 1
+        if counter > 100:
+            db.commit()
+    db.commit()
     db.close()
-    print("Finished all writing")
+    log("Finished all writing")
 
 def preprocess_files(files, threads_num, output_file_path):
     """This preprocesses given list of log files, using given number of threads."""
@@ -108,7 +113,7 @@ def preprocess_files(files, threads_num, output_file_path):
 
     db = EventDB(output_file_path)
 
-    queue = multiprocessing.Queue(100)
+    queue = multiprocessing.Queue(1000)
     writer = multiprocessing.Process(target=sql_writer, args = (output_file_path, queue))
     writer.start()
 

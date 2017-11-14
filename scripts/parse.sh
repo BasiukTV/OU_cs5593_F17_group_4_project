@@ -1,11 +1,11 @@
 #!/bin/bash
 #
 #SBATCH --partition=normal
-#SBATCH --ntasks=1
-#SBATCH --mem=8192
-#SBATCH --output=preprocess_%J_stdout.log
-#SBATCH --error=preprocess_%J_stderr.log
-#SBATCH --time=60:00:00
+#SBATCH --ntasks=50
+#SBATCH --mem=4096
+#SBATCH --output=parsed-%J/out.log
+#SBATCH --error=parsed-%J/err.log
+#SBATCH --time=24:00:00
 #SBATCH --job-name=github-processing
 #SBATCH --mail-user=timo.kaufmann@ou.edu
 #SBATCH --mail-type=ALL
