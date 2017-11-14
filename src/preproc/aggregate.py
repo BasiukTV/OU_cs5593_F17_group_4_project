@@ -86,7 +86,7 @@ def setup_db(con):
             issue_resolved_count integer,
             issue_commented_count integer,
             issue_other_activity_count integer,
-            owned_repos_starts_count integer,
+            owned_repos_stars_count integer,
             reserve1 integer,
             reserve2 text
         )""")
@@ -179,8 +179,9 @@ def aggregate_contributor(con, stoptime, offset):
             issue_commented_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_comments")
             # TODO analyze since when those are around
             issue_other_activity_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_misc")
-            owned_repos_starts_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "repo_creations")
-            repos_started_count = owned_repos_starts_count + repos_forked_count # TODO is this right?
+            # TODO
+            owned_repos_stars_count = None
+            repos_started_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "repo_creations")
 
             con.execute("INSERT INTO contributor VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
                 user_id,
