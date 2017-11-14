@@ -20,4 +20,4 @@ module load Python/3.5.1-intel-2016a
 python3 /home/timo/repo/src/preproc/parse_json.py \
 	--indir "${indir}" \
 	--outdir "${outdir}" \
-	--threads ${SLURM_CPUS_PER_TASK}
+	--threads "${SLURM_CPUS_ON_NODE}"
