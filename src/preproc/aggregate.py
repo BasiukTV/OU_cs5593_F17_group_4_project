@@ -21,7 +21,6 @@ def delete_indices(con):
     con.execute("DROP INDEX IF EXISTS star_repo");
 
 def drop_tables(con):
-    con.execute("DROP TABLE IF EXISTS repo");
     con.execute("DROP TABLE IF EXISTS repository");
     con.execute("DROP TABLE IF EXISTS user");
     con.execute("DROP TABLE IF EXISTS user_name");
@@ -29,7 +28,7 @@ def drop_tables(con):
 
 # for testing purposes, make sure to remove all results of the last run
 def reset_database(con):
-    # delete_indices(con) # not during development; TODO make configurable
+    delete_indices(con)
     drop_tables(con)
 
 # create all the nessessary tables
@@ -39,11 +38,13 @@ def setup_db(con):
         repoID integer,
         owner text,
         name text,
-        creation_date
+        creation_date,
+        finished integer
         )''')
     con.execute('''CREATE TABLE IF NOT EXISTS user (
         id integer PRIMARY KEY,
-        first_encounter text
+        first_encounter text,
+        finished integer
         )''')
     con.execute('''CREATE TABLE IF NOT EXISTS user_name (
         id integer,
@@ -95,7 +96,7 @@ def setup_db(con):
     # con.execute("CREATE INDEX IF NOT EXISTS repo_id on repository(repositoryID)")
 
 def initialize_repo_table(con):
-    con.execute('''INSERT INTO repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time FROM repo_creations''')
+    con.execute('''INSERT INTO repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time, 0 FROM repo_creations''')
 
 def create_indices(con, tables):
     for table in tables:
@@ -146,10 +147,10 @@ def count_contributor_event(con, time_start, time_end, aliases, event):
 
 # create all the entries in the contributor table
 def aggregate_contributor(con, stoptime, offset):
-    contributor_count = con.execute("SELECT count(*) FROM user").fetchone()[0]
+    contributor_count = con.execute("SELECT count(*) FROM user WHERE finished = 0").fetchone()[0]
     finished_with = 0
 
-    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user"):
+    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM user WHERE finished = 0"):
         aliases = []
         for alias in con.execute("SELECT name, first_encounter FROM user_name where id = ? ORDER BY first_encounter", (user_id,)):
             aliases = aliases + [ alias ]
@@ -201,11 +202,19 @@ def aggregate_contributor(con, stoptime, offset):
             cur_week_iso = next_week_iso
 
         # status report
+        con.execute("UPDATE user SET finished = 1 WHERE id = ?", user_id)
         finished_with += 1
         if finished_with % 1000 == 0:
             elog("Finished with {}/{} contributors".format(finished_with, contributor_count))
 
 def initialize_user_table(con, tables):
+    already_known = con.execute("SELECT count(id) FROM user").fetchone()[0]
+    users_that_starred = con.execute("SELECT count(actor_id) FROM starrings").fetchone()[0]
+    # This is of course not 100% accurate, but a good approximation and saves a lot of time.
+    if already_known > users_that_starred:
+        log("Skipping user table initialization, as it apparently is already initialized")
+        return
+
     sources = 'SELECT actor_id, actor_name, time FROM {}'.format(tables[0])
     # All actors ever encountered
     for table in tables[1:]:
@@ -224,7 +233,7 @@ def initialize_user_table(con, tables):
                 first_encounter = unknown_ids.pop(actor_name)
                 con.execute("UPDATE user SET first_encounter = min(first_encounter, ?) WHERE id = ?", (first_encounter, actor_id))
 
-            con.execute("INSERT OR IGNORE INTO user VALUES (?, ?)", (actor_id, first_encounter))
+            con.execute("INSERT OR IGNORE INTO user VALUES (?, ?, 0)", (actor_id, first_encounter))
             con.execute("INSERT OR IGNORE INTO user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
         elif actor_name is not None:
             unknown_ids[actor_name] = first_encounter
@@ -237,10 +246,10 @@ def initialize_user_table(con, tables):
 
 # create all the entries in the repository table
 def aggregate_repository(con, stoptime, offset):
-    repo_count = con.execute("SELECT count(*) FROM repo").fetchone()[0]
+    repo_count = con.execute("SELECT count(*) FROM repo WHERE finished = 0").fetchone()[0]
     finished_with = 0
 
-    for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo"):
+    for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo WHERE finished = 0"):
         cur_week = parse_isotime(creation_date)
         cur_week_iso = cur_week.isoformat()
         while cur_week < stoptime:
@@ -295,6 +304,7 @@ def aggregate_repository(con, stoptime, offset):
             cur_week_iso = next_week_iso
 
         # status report
+        con.execute("UPDATE repo SET finished = 1 WHERE id = ?", id)
         finished_with += 1
         if finished_with % 1000 == 0:
             elog("Finished with {}/{} repos".format(finished_with, repo_count))
@@ -327,8 +337,6 @@ def aggregate_data(database_file):
 
     con = sqlite3.connect(database_file)
     con.execute("PRAGMA journal_mode = WAL")
-    log("resetting the database")
-    reset_database(con);
     log("setting up the necessary tables")
     setup_db(con);
     log("setting up the indices")
