@@ -202,31 +202,34 @@ def aggregate_contributor(con, stoptime, offset):
             cur_week_iso = next_week_iso
 
         # status report
-        con.execute("UPDATE user SET finished = 1 WHERE id = ?", user_id)
+        con.execute("UPDATE user SET finished = 1 WHERE id = ?", (user_id, ))
         finished_with += 1
         if finished_with % 1000 == 0:
+            con.commit()
             elog("Finished with {}/{} contributors".format(finished_with, contributor_count))
 
 def initialize_user_table(con, tables):
     already_known = con.execute("SELECT count(id) FROM user").fetchone()[0]
-    users_that_starred = con.execute("SELECT count(actor_id) FROM starrings").fetchone()[0]
+    users_with_repos = con.execute("SELECT count(actor_id) FROM repo_creations").fetchone()[0]
     # This is of course not 100% accurate, but a good approximation and saves a lot of time.
-    if already_known > users_that_starred:
+    if already_known > users_with_repos:
         log("Skipping user table initialization, as it apparently is already initialized")
         return
 
-    sources = 'SELECT actor_id, actor_name, time FROM {}'.format(tables[0])
-    # All actors ever encountered
-    for table in tables[1:]:
-        sources = sources + """
-        UNION
-        SELECT actor_id, actor_name, time FROM {}
-        """.format(table)
+    con.execute('''CREATE TEMPORARY TABLE all_actor_events (
+        actor_id int,
+        actor_name int,
+        time int
+    )''')
 
-    unknown_ids = {};
+    for table in tables:
+        con.execute("INSERT INTO all_actor_events SELECT actor_id, actor_name, time FROM {}".format(table))
+
+
+    unknown_ids = {}
 
     # Put all actors into a single table, map their names to them
-    for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, min(time) FROM ({}) GROUP BY actor_id, actor_name".format(sources)):
+    for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, min(time) FROM all_actor_events GROUP BY actor_id, actor_name"):
         if actor_id is not None:
             # if we already encountered the name before (just without an ID), use that as the first encounter date
             if unknown_ids.get(actor_name) is not None:
@@ -242,7 +245,7 @@ def initialize_user_table(con, tables):
             # given 1,069,793 total users
         else:
             elog("All none")
-    log("Remaining {} unkown ids", len(unknown_ids.keys()))
+    log("Remaining {} unkown ids:\n{}", len(unknown_ids.keys()), unknown_ids.keys())
 
 # create all the entries in the repository table
 def aggregate_repository(con, stoptime, offset):
@@ -304,9 +307,10 @@ def aggregate_repository(con, stoptime, offset):
             cur_week_iso = next_week_iso
 
         # status report
-        con.execute("UPDATE repo SET finished = 1 WHERE id = ?", id)
+        con.execute("UPDATE repo SET finished = 1 WHERE id = ?", (id, ))
         finished_with += 1
         if finished_with % 1000 == 0:
+            con.commit()
             elog("Finished with {}/{} repos".format(finished_with, repo_count))
 
 # move from intermediate parsed database to the aggregated format
