@@ -195,7 +195,7 @@ def aggregate_contributor(con, stoptime, offset):
                 issue_resolved_count,
                 issue_commented_count,
                 issue_other_activity_count,
-                owned_repos_starts_count
+                owned_repos_stars_count
             ))
             cur_week = next_week
             cur_week_iso = next_week_iso
@@ -326,6 +326,7 @@ def aggregate_data(database_file):
     ]
 
     con = sqlite3.connect(database_file)
+    con.execute("PRAGMA journal_mode = WAL")
     log("resetting the database")
     reset_database(con);
     log("setting up the necessary tables")

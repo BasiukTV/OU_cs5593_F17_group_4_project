@@ -224,8 +224,10 @@ def preprocess_files(files, threads_num, output_file_path):
         pass
 
     con = sqlite3.connect(output_file_path)
-    cur = con.cursor()
+    con.execute("PRAGMA journal_mode = WAL")
     setup_db_scheme(cur);
+    con.commit()
+    con.close()
 
     # Determine size of a batch and number of batch tuns required to process all files
     batch_size = DEFAULT_FILE_PREPROCESSING_BATCH_SIZE
@@ -256,10 +258,6 @@ def preprocess_files(files, threads_num, output_file_path):
         #             files[starting_file_index : starting_file_index + files_to_process], # on these files
         #             [DB_PATH] * files_to_process) # with that database
         #         )
-
-
-    con.commit()
-    con.close()
 
 def process_file(path_to_file_and_database):
     (path_to_file, path_to_database) = path_to_file_and_database
