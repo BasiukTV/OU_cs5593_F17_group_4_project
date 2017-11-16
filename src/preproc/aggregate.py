@@ -100,6 +100,11 @@ def setup_db(con):
     # con.execute("CREATE INDEX IF NOT EXISTS repo_id on repository(repositoryID)")
 
 def initialize_repo_table(con):
+    already_known = con.execute("SELECT count(id) FROM repo").fetchone()[0]
+    # This is of course not 100% accurate, but a good approximation and saves a lot of time.
+    if already_known > 0:
+        log("Skipping repo table initialization, as it apparently is already initialized")
+        return
     con.execute('''INSERT INTO repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time, 0 FROM repo_creations''')
 
 def create_indices(con, tables):
@@ -215,9 +220,8 @@ def aggregate_contributor(con, stoptime, offset):
 
 def initialize_user_table(con, tables):
     already_known = con.execute("SELECT count(id) FROM user").fetchone()[0]
-    users_with_repos = con.execute("SELECT count(actor_id) FROM repo_creations").fetchone()[0]
     # This is of course not 100% accurate, but a good approximation and saves a lot of time.
-    if already_known > users_with_repos:
+    if already_known > 1:
         log("Skipping user table initialization, as it apparently is already initialized")
         return
 
