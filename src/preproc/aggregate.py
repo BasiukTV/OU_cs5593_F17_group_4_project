@@ -65,11 +65,14 @@ def setup_db(con):
             contributor_type4_count integer,
             contributor_type5_count integer,
             code_push_count integer,
-            pull_request_count integer,
+            pull_request_created_count integer,
+            pull_request_reviewed_count integer,
+            pull_request_resolved_count integer,
             fork_count integer,
             release_count integer,
-            active_issues_count integer,
-            resolved_issue_count integer,
+            issue_created_count integer,
+            issue_commented_count integer,
+            issue_resolved_count integer,
             org_activity_count integer,
             reserve1 integer,
             reserve2 text
@@ -83,6 +86,7 @@ def setup_db(con):
             code_pushed_count integer,
             pull_request_created_count integer,
             pull_request_reviewed_count integer,
+            pull_request_resolved_count integer,
             issue_created_count integer,
             issue_resolved_count integer,
             issue_commented_count integer,
@@ -126,7 +130,7 @@ def count_repo_event(con, time_start, time_end, owner, name, event):
           AND time >= ? AND time < ?
     """.format(event), (owner, name, time_start, time_end)).fetchone()[0]
 
-def count_contributor_event(con, time_start, time_end, aliases, event):
+def count_contributor_event(con, name_attr, time_start, time_end, aliases, event):
     count = 0
     aliases = aliases.copy() + [(None, time_end)]
     for i in range (0, len(aliases) - 1):
@@ -136,10 +140,10 @@ def count_contributor_event(con, time_start, time_end, aliases, event):
         count += con.execute("""
             SELECT count(*)
             FROM {}
-            WHERE actor_name = ?
+            WHERE {} = ?
               AND time >= ?
               AND time < ?
-        """.format(event), (alias, alias_start, alias_end)).fetchone()[0]
+        """.format(event, name_attr), (alias, alias_start, alias_end)).fetchone()[0]
         if alias_end == time_end:
             break
     # TODO measure performance impact of between vs manual range, make range exclusve
@@ -171,20 +175,20 @@ def aggregate_contributor(con, stoptime, offset):
                 else:
                     break
 
-            repos_forked_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "forks")
-            code_pushed_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "pushes")
-            pull_request_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "pr_opens")
-            pull_request_reviewed_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "pr_review_comment")
-            issue_created_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_opens")
-            issue_resolved_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_close")
-            issue_commented_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_comments")
+            repos_forked_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "forks")
+            code_pushed_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "pushes")
+            pull_request_created_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "pr_opens")
+            pull_request_reviewed_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "pr_review_comment")
+            pull_request_resolved_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "pr_close")
+            issue_created_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "issue_opens")
+            issue_resolved_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "issue_close")
+            issue_commented_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "issue_comments")
             # TODO analyze since when those are around
-            issue_other_activity_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "issue_misc")
-            # TODO
-            owned_repos_stars_count = None
-            repos_started_count = count_contributor_event(con, cur_week_iso, next_week_iso, aliases, "repo_creations")
+            issue_other_activity_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "issue_misc")
+            owned_repos_stars_count = count_contributor_event(con, "repo_owner_name", cur_week_iso, next_week_iso, aliases, "starrings")
+            repos_started_count = count_contributor_event(con, "actor_name", cur_week_iso, next_week_iso, aliases, "repo_creations")
 
-            con.execute("INSERT INTO contributor VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
+            con.execute("INSERT INTO contributor VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
                 user_id,
                 cur_week,
                 repos_started_count,
@@ -192,6 +196,7 @@ def aggregate_contributor(con, stoptime, offset):
                 code_pushed_count,
                 pull_request_created_count,
                 pull_request_reviewed_count,
+                pull_request_resolved_count,
                 issue_created_count,
                 issue_resolved_count,
                 issue_commented_count,
@@ -275,17 +280,19 @@ def aggregate_repository(con, stoptime, offset):
             contributor_type4_count = None
             contributor_type5_count = None
             code_push_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pushes") # TODO should this count individual commits instead?
-            pull_request_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pr_opens")
+            pull_request_created_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pr_opens")
+            pull_request_reviewed_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pr_review_comment")
+            pull_request_resolved_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pr_close")
             fork_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "forks")
             release_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "releases")
-            all_issues_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_opens")
-            resolved_issue_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_close")
-            active_issues_count = all_issues_count - resolved_issue_count
+            issue_created_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_opens")
+            issue_commented_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_comments")
+            issue_resolved_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_close")
             org_activity_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "issue_misc")
             + count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "pr_misc")
             + count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "milestone_misc")
 
-            con.execute("INSERT INTO repository VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
+            con.execute("INSERT INTO repository VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)", (
                 id,
                 cur_week_iso,
                 star_count,
@@ -296,11 +303,14 @@ def aggregate_repository(con, stoptime, offset):
                 contributor_type4_count,
                 contributor_type5_count,
                 code_push_count,
-                pull_request_count,
+                pull_request_created_count,
+                pull_request_reviewed_count,
+                pull_request_resolved_count,
                 fork_count,
                 release_count,
-                active_issues_count,
-                resolved_issue_count,
+                issue_created_count,
+                issue_commented_count,
+                issue_resolved_count,
                 org_activity_count
             )) # TODO make clear that id is *not* githubs repo id
             cur_week = next_week
