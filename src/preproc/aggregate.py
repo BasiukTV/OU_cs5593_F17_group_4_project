@@ -225,7 +225,7 @@ def initialize_user_table(con, tables):
         log("Skipping user table initialization, as it apparently is already initialized")
         return
 
-    con.execute('''CREATE TEMPORARY TABLE all_actor_events (
+    con.execute('''CREATE TABLE all_actor_events (
         actor_id int,
         actor_name int,
         time int
@@ -233,7 +233,9 @@ def initialize_user_table(con, tables):
 
     for table in tables:
         con.execute("INSERT INTO all_actor_events SELECT actor_id, actor_name, time FROM {}".format(table))
-
+        log("Done copying over {}", table)
+        con.commit()
+    log("Done copying all events into one table", table)
 
     unknown_ids = {}
 
