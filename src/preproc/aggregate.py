@@ -239,8 +239,16 @@ def initialize_user_table(con, tables):
 
     unknown_ids = {}
 
+    con.execute("PRAGMA max_page_count = 2147483646;")
+    con.execute('''CREATE TABLE first_spots (
+        actor_id int,
+        actor_name int,
+        time int
+    )''')
+    con.execute("INSERT INTO first_spots SELECT actor_id, actor_name, min(time) FROM all_actor_events GROUP BY actor_id, actor_name")
+
     # Put all actors into a single table, map their names to them
-    for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, min(time) FROM all_actor_events GROUP BY actor_id, actor_name"):
+    for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, time FROM first_spots"):
         if actor_id is not None:
             # if we already encountered the name before (just without an ID), use that as the first encounter date
             if unknown_ids.get(actor_name) is not None:
