@@ -9,10 +9,10 @@
 #SBATCH --job-name=github-processing
 #SBATCH --mail-user=timo.kaufmann@ou.edu
 #SBATCH --mail-type=ALL
-#SBATCH --workdir=/work/timo
+#SBATCH --workdir=/scratch/timo
 #
 #################################################
-scratch="/work/timo"
+scratch="/scratch/timo"
 indir="${scratch}/parsed"
 # outdir="${scratch}/aggregated-${SLURM_JOB_ID}"
 mkdir -p "${outdir}"

@@ -33,25 +33,6 @@ def reset_database(con):
 
 # create all the nessessary tables
 def setup_db(con):
-    con.execute('''CREATE TABLE IF NOT EXISTS repo (
-        id integer PRIMARY KEY AUTOINCREMENT,
-        repoID integer,
-        owner text,
-        name text,
-        creation_date,
-        finished integer
-        )''')
-    con.execute('''CREATE TABLE IF NOT EXISTS user (
-        id integer PRIMARY KEY,
-        first_encounter text,
-        finished integer
-        )''')
-    con.execute('''CREATE TABLE IF NOT EXISTS user_name (
-        id integer,
-        name text,
-        first_encounter text,
-        primary key (id, name)
-        )''')
     # TODO use the functions in the database dir for this
     con.execute("""
         CREATE TABLE IF NOT EXISTS repository (
@@ -100,11 +81,19 @@ def setup_db(con):
     # con.execute("CREATE INDEX IF NOT EXISTS repo_id on repository(repositoryID)")
 
 def initialize_repo_table(con):
-    already_known = con.execute("SELECT count(id) FROM repo").fetchone()[0]
     # This is of course not 100% accurate, but a good approximation and saves a lot of time.
-    if already_known > 0:
+    if table_exists(con, 'repo'):
         log("Skipping repo table initialization, as it apparently is already initialized")
         return
+
+    con.execute('''CREATE TABLE repo (
+        id integer PRIMARY KEY AUTOINCREMENT,
+        repoID integer,
+        owner text,
+        name text,
+        creation_date,
+        finished integer
+        )''')
     con.execute('''INSERT INTO repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time, 0 FROM repo_creations''')
 
 def create_indices(con, tables):
@@ -163,8 +152,6 @@ def aggregate_contributor(con, stoptime, offset):
         aliases = []
         for alias in con.execute("SELECT name, first_encounter FROM user_name where id = ? ORDER BY first_encounter", (user_id,)):
             aliases = aliases + [ alias ]
-        # TODO consider different aliases at different times (instead of only id)
-        # TODO evaluate for which times a Null in the actor_id field actually occurs in relation with when renaming was introduced
         cur_week = parse_isotime(first_encounter)
         cur_week_iso = cur_week.isoformat()
         while cur_week < stoptime:
@@ -214,46 +201,49 @@ def aggregate_contributor(con, stoptime, offset):
         # status report
         con.execute("UPDATE user SET finished = 1 WHERE id = ?", (user_id, ))
         finished_with += 1
-        if finished_with % 1000 == 0:
-            con.commit()
-            elog("Finished with {}/{} contributors".format(finished_with, contributor_count))
+        # if finished_with % 1000 == 0:
+        con.commit()
+        elog("Finished with {}/{} contributors".format(finished_with, contributor_count))
+
+def table_exists(con, table):
+    return con.execute("SELECT count(name) FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0] == 1;
 
 def initialize_user_table(con, tables):
-    already_known = con.execute("SELECT count(id) FROM user").fetchone()[0]
     # This is of course not 100% accurate, but a good approximation and saves a lot of time.
-    if already_known > 1:
+    if table_exists(con, 'user'):
         log("Skipping user table initialization, as it apparently is already initialized")
         return
 
-    con.execute('''CREATE TABLE IF NOT EXISTS all_actor_events (
-        actor_id int,
-        actor_name int,
-        time int
-    )''')
+    con.execute('''CREATE TABLE user (
+        id integer PRIMARY KEY,
+        first_encounter text,
+        finished integer
+        )''')
+    con.execute('''CREATE TABLE user_name (
+        id integer,
+        name text,
+        first_encounter text,
+        primary key (id, name)
+        )''')
 
-    entries = con.execute("SELECT count(*) FROM all_actor_events").fetchone()[0]
-    if entries == 0:
-        log("Copying events")
+    if not table_exists(con, 'all_actor_events'):
+        log("Copying events into all_actor_events table")
+        con.execute('''CREATE TABLE all_actor_events (
+            actor_id int,
+            actor_name int,
+            time int
+        )''')
+
         for table in tables:
             con.execute("INSERT INTO all_actor_events SELECT actor_id, actor_name, time FROM {}".format(table))
             log("Done copying over {}", table)
             con.commit()
-    log("Done copying all events into one table")
+        log("Done copying all events into one table")
 
     unknown_ids = {}
 
-    con.execute("PRAGMA max_page_count = 2147483646;")
-    con.execute('''CREATE TABLE first_spots (
-        actor_id int,
-        actor_name int,
-        time int
-    )''')
-    con.execute("INSERT INTO first_spots SELECT actor_id, actor_name, min(time) FROM all_actor_events GROUP BY actor_id, actor_name")
-    con.commit()
-    log("Done creating first_spots")
-
     # Put all actors into a single table, map their names to them
-    for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, time FROM first_spots"):
+    for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, min(time) FROM all_actor_events GROUP BY actor_id, actor_name"):
         if actor_id is not None:
             # if we already encountered the name before (just without an ID), use that as the first encounter date
             if unknown_ids.get(actor_name) is not None:
@@ -269,7 +259,14 @@ def initialize_user_table(con, tables):
             # given 1,069,793 total users
         else:
             elog("All none")
-    log("Remaining {} unkown ids:\n{}", len(unknown_ids.keys()), unknown_ids.keys())
+
+    # Actors that didn't do anything after the point where IDs where introduced.
+    # I'm assuming renaming probably wasn't possible back then.
+    # So just assign them fake IDs (negative).
+    for (i, (actor_name, first_encounter)) in enumerate(unknown_ids.items(), 1):
+        con.execute("INSERT INTO USER VALUES (?, ?, 0)", (-i, first_encounter))
+        con.execute("INSERT INTO user_name VALUES (?, ?, ?)", (-i, actor_name, first_encounter))
+
 
 # create all the entries in the repository table
 def aggregate_repository(con, stoptime, offset):
@@ -338,9 +335,9 @@ def aggregate_repository(con, stoptime, offset):
         # status report
         con.execute("UPDATE repo SET finished = 1 WHERE id = ?", (id, ))
         finished_with += 1
-        if finished_with % 1000 == 0:
-            con.commit()
-            elog("Finished with {}/{} repos".format(finished_with, repo_count))
+        # if finished_with % 1000 == 0:
+        con.commit()
+        elog("Finished with {}/{} repos".format(finished_with, repo_count))
 
 # move from intermediate parsed database to the aggregated format
 def aggregate_data(database_file):
@@ -369,6 +366,9 @@ def aggregate_data(database_file):
     ]
 
     con = sqlite3.connect(database_file)
+    # Some queries needs a lot of temporary storage if the DB is big, which may exceed /tmp size
+    con.execute("PRAGMA temp_store_directory = '{}'".format(os.path.dirname(database_file)))
+
     con.execute("PRAGMA journal_mode = WAL")
     log("setting up the necessary tables")
     setup_db(con);
