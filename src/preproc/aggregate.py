@@ -246,6 +246,8 @@ def initialize_user_table(con, tables):
         time int
     )''')
     con.execute("INSERT INTO first_spots SELECT actor_id, actor_name, min(time) FROM all_actor_events GROUP BY actor_id, actor_name")
+    con.commit()
+    log("Done creating first_spots")
 
     # Put all actors into a single table, map their names to them
     for (actor_id, actor_name, first_encounter) in con.execute("SELECT actor_id, actor_name, time FROM first_spots"):
