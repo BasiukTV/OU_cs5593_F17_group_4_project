@@ -233,6 +233,7 @@ def initialize_user_table(con, tables):
 
     entries = con.execute("SELECT count(*) FROM all_actor_events").fetchone()[0]
     if entries == 0:
+        log("Copying events")
         for table in tables:
             con.execute("INSERT INTO all_actor_events SELECT actor_id, actor_name, time FROM {}".format(table))
             log("Done copying over {}", table)
