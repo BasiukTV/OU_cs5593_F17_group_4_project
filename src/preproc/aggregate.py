@@ -237,7 +237,7 @@ def initialize_user_table(con, tables):
             con.execute("INSERT INTO all_actor_events SELECT actor_id, actor_name, time FROM {}".format(table))
             log("Done copying over {}", table)
             con.commit()
-    log("Done copying all events into one table", table)
+    log("Done copying all events into one table")
 
     unknown_ids = {}
 
