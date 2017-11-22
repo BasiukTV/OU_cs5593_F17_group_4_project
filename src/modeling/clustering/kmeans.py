@@ -35,6 +35,53 @@ class KMeansModeling(Modeling):
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
         return KMeansModel()
+
+def do_kmeans(points, k, diff):
+    # k random points to use as our initial centroids
+    centroids = random.sample(points, k)
+
+    # k clusters using those centroids
+    clusters = [Cluster([p]) for p in centroids]
+
+    # loop until the clusters don't change
+    counter = 0
+    while True:
+        # a list of lists to hold the points in each cluster
+        lists =[[] for _ in clusters]
+        clusterCount = len(clusters)
+    
+        counter += 1
+        for p in points:
+            # distance between the point and the centroid of the first cluster
+            smallest_distance = getDistance(p, clusters[0].centroid)
+
+            # set the cluster this point belongs to
+            clusterIndex = 0
+
+            # for the rest of the clusters
+            for i in range(clusterCount - 1):
+                # calculate the distance of that point to each other cluster's centroid
+                distance = getDistance(p, clusters[i+1].centroid)
+                # if closer to that cluster's centroid then
+                if distance < smallest_distance:
+                    smallest_distance = distance
+                    clusterIndex = i+1
+            # set the point to belong to that cluster
+            lists[clusterIndex].append(p)
+           
+        # Set our biggest_shift to zero for this iteration
+        biggest_shift = 0.0
+ 
+        for i in range(clusterCount):
+            # calculate how far the centroid moved in this iteration
+            shift = clusters[i].update(lists[i])
+            # Keep track of the largest move from all cluster centroid updates
+            biggest_shift = max(biggest_shift, shift)
+
+        # stop when the centroid doesn't move much
+        if biggest_shift < diff:
+            break
+    return clusters
     
 class Cluster(object):
     ''' A set of points and their centroid '''
