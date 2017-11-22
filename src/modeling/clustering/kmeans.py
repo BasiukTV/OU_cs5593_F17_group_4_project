@@ -36,12 +36,23 @@ class KMeansModeling(Modeling):
         # TODO Implement this
         return KMeansModel()
 
+def getDistance(a, b):
+    ''' calculate Euclidean distance between two points '''
+
+    diff_sum = 0.0
+    for i in range(len(a)):
+        squared_diff = pow((a[i]-b[i]), 2)
+        diff_sum += squared_diff
+    dist = math.sqrt(diff_sum)
+    return dist    
+
 if  __name__ == "__main__":
     import argparse
 
     # Configuring CLI arguments parser and parsing the arguments
     parser = argparse.ArgumentParser("Script for creating a kmeans clustering model of GitHub contributors.")
     parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
+    parser.add_argument("-k", "--clusters", help="Chosen k clusters.")
     args = parser.parse_args()
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
