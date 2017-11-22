@@ -35,6 +35,37 @@ class KMeansModeling(Modeling):
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
         return KMeansModel()
+    
+class Cluster(object):
+    ''' A set of points and their centroid '''
+    def __init__(self, points):
+        # the points that belong to this cluster
+        self.points = points
+         
+        # set up the initial centroid 
+        self.centroid = self.calculateCentroid()
+
+    def update(self, points):
+        ''' Returns the distance between the previous centroid and 
+        the new after recalculating and storing the new centroid '''
+    
+        old_centroid = self.centroid
+        self.points = points
+        self.centroid = self.calculateCentroid()
+        shift = getDistance(old_centroid, self.centroid)
+        return shift
+
+    def calculateCentroid(self):
+        ''' Find a virtual center point for a group of n-dimensional points '''
+        numPoints = len(self.points)
+        # print("Points = %s" % (str(self.points)))
+        coords = [p for p in self.points]
+        # Reformat that so all x's are together, all y'z, and so on.
+        unzipped = zip(*coords)
+        # Calculate the mean for each dimension
+        centroid_coords = [math.fsum(dList)/numPoints for dList in unzipped]
+        #print("Centroid is %s" %(str(centroid_coords)))
+        return centroid_coords
 
 def getDistance(a, b):
     ''' calculate Euclidean distance between two points '''
