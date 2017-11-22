@@ -31,6 +31,20 @@ class KMeansModeling(Modeling):
     def __init__(self, preproc_dataset_path):
         super().__init__(preproc_dataset_path)
         # TODO This simply calls super constructor and might need (or not) updates
+        
+        # stop updating centroids when their differences is less than 0.005
+        self.diff = 0.0049
+        # list of number of contributor clusters - to choose the adequate k from
+        self.k_list = [2, 3, 4, 5]
+        # a list of each contributor's data
+        # TODO get the preprocessed and aggregated data for each contributor
+        self.data_list = [[]]
+ 
+    def do_kmeans_clustering(self):
+        # for each given k, do k-means clustering
+        for k in self.k_list:
+            clusters = do_kmeans(self.data_list, k, self.diff)
+            #TODO visualization of the clusters    
 
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
@@ -69,7 +83,7 @@ def do_kmeans(points, k, diff):
             # set the point to belong to that cluster
             lists[clusterIndex].append(p)
            
-        # Set our biggest_shift to zero for this iteration
+        # Set biggest_shift to zero for this iteration
         biggest_shift = 0.0
  
         for i in range(clusterCount):
