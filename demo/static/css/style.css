@@ -1,0 +1,146 @@
+html, body, h1 {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #f4f4f4;
+  font-family: 'Open Sans', sans-serif;
+}
+
+h2 {
+  
+  font-weight: 300;
+  
+  letter-spacing: -1.2px;
+}
+
+a {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.container {
+  margin: 0 auto;
+}
+
+.pull-left {
+  float: left;
+}
+
+.pull-right {
+  float: right;
+}
+
+.clearfix {
+  clear: both;
+}
+
+.section-content {
+  color: #3a3a3a;
+}
+
+header {
+  background-color: #fff;
+  padding: 25px 0;
+}
+
+.title {
+  float: left;
+  font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
+  font-size: 17px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+.title a, .title a:visited {
+  color: #3a3a3a;
+}
+
+.main-nav {
+  float: right;
+}
+
+.main-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.main-nav li {
+  display: inline-block;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.main-nav li a {
+  color: #3a3a3a;
+}
+
+
+.hero-section .section-content {
+  position: relative;
+  top: 100px;
+}
+
+.hero-section .section-content h2 {
+  font-size: 40px;
+}
+
+.btn-hierarchical{
+}
+
+.btn-kmeans{
+}
+
+.btn-logistic{
+}
+
+.btn-linear{
+}
+
+.btn-train{
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  color: #3a3a3a;
+  display: block;
+  font-family: 'Open Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.form-group input {
+  border: none;
+  border-bottom: 2px solid #4285f4;
+  background-color: transparent;
+  color: #3a3a3a;
+  font-size: 18px;
+  padding: 5px 0;
+  width: 100%;
+}
+
+.form-group input:focus {
+  outline: 0;
+}
+
+.form-group .error-message {
+  margin: 10px 0;
+  color: #db4437;
+}
+
+.form-group .error-message + input {
+  border-bottom: 2px solid #db4437;
+}
+
+.error-message {
+  color: #db4437;
+}
+

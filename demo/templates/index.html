@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+
+{% block content %}
+  <main class="hero-section">
+    <div class="container">
+      
+      <div class="section-content">
+        <a href="{{ url_for('kmeans') }}" class="btn-kmeans">K-means</a>
+        <a href="{{ url_for('hierarchical') }}" class="btn-heirarchical">Hierarchical</a> 
+        <a href="{{ url_for('linearReg') }}" class="btn-linear">Linear Regression</a>
+        <a href="{{ url_for('logisticReg') }}" class="btn-logistic">Logistic Regression</a> 
+      </div>
+      
+      <div class="clearfix"></div>
+
+    </div>
+  </main>
+{% endblock %}
