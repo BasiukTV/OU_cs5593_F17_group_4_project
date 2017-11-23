@@ -1,82 +1,51 @@
 from flask import Flask, render_template, request, redirect, url_for
-from forms import DatasetForm
+from forms import PreprocessingForm, ClusteringForm, RegressionForm
 
 app = Flask(__name__)
-
 app.secret_key = "development-key"
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+  return render_template("index.html")
 
-@app.route("/dataset", methods=["GET", "POST"])
-def dataset():
-    form = DatasetForm()
+@app.route("/preprocess", methods=["GET", "POST"])
+def preprocess():
+    form = PreprocessingForm()
 
     if request.method == "GET":
         if form.validate() == False:
-            return render_template('fpath.html', form=form)
+            return render_template('preprocess.html', form=form)
         else:
             return redirect(url_for('home'))
 
     elif request.method == "GET":
-        return render_template('fpath.html', form=form)
+        return render_template('preprocess.html', form=form)
 
-@app.route("/kmeans", methods=["GET"])
-def kmeans():
-    # place holder
-    form = DatasetForm()
+@app.route("/cluster", methods=["GET"])
+def cluster():
+    form = ClusteringForm()
 
     if request.method == "GET":
         if form.validate() == False:
-            return render_template('fpath.html', form=form)
+            return render_template('cluster.html', form=form)
         else:
             return redirect(url_for('home'))
 
     elif request.method == "GET":
-        return render_template('fpath.html', form=form)
+        return render_template('cluster.html', form=form)
 
-@app.route("/hierarchical", methods=["GET"])
-def hierarchical():
-    # place holder
-    form = DatasetForm()
+@app.route("/regress", methods=["GET"])
+def regress():
+    form = RegressionForm()
 
     if request.method == "GET":
         if form.validate() == False:
-            return render_template('fpath.html', form=form)
+            return render_template('regress.html', form=form)
         else:
             return redirect(url_for('home'))
 
     elif request.method == "GET":
-        return render_template('fpath.html', form=form)
-
-@app.route("/linearReg", methods=["GET"])
-def linearReg():
-    # place holder
-    form = DatasetForm()
-
-    if request.method == "GET":
-        if form.validate() == False:
-            return render_template('fpath.html', form=form)
-        else:
-            return redirect(url_for('home'))
-
-    elif request.method == "GET":
-        return render_template('fpath.html', form=form)
-
-@app.route("/logisticReg", methods=["GET"])
-def logisticReg():
-    # place holder
-    form = DatasetForm()
-
-    if request.method == "GET":
-        if form.validate() == False:
-            return render_template('fpath.html', form=form)
-        else:
-            return redirect(url_for('home'))
-
-    elif request.method == "GET":
-        return render_template('fpath.html', form=form)
+        return render_template('regress.html', form=form)
 
 if __name__ == "__main__":
   app.run(debug=True)
