@@ -3,22 +3,20 @@
 {% block content %}
   <main class="container">
     <div class="section-content">
-      <h2>Choose a dataset</h2>
-
-      <form method="GET" action="/dataset">
+      <form method="GET" action="/cluster">
         <div class="form-group">
-          {{ form.fpath.label }}
+          {{ form.clusteringAlgorithms.label }}          
 
-          {% if form.fpath.errors %}
-            {% for error in form.fpath.errors %}
+          {{ form.clusteringAlgorithms }}
+
+          {% if form.clusteringAlgorithms.errors %}
+            {% for error in form.clusteringAlgorithms.errors %}
               <p class="error-message">{{ error }}</p>
             {% endfor %}
           {% endif %}
-
-          {{ form.fpath }}
         </div>
 
-        {{ form.submit(class="btn-train") }}
+        {{ form.submit(class="btn-cluster") }}
       </form>
     </div>
   </main>

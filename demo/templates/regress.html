@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+
+{% block content %}
+  <main class="container">
+    <div class="section-content">
+      <form method="GET" action="/regress">
+        <div class="form-group">
+          {{ form.regressionAlgorithms.label }}
+
+          {{ form.regressionAlgorithms }}
+
+          {% if form.regressionAlgorithms.errors %}
+            {% for error in form.regressionAlgorithms.errors %}
+              <p class="error-message">{{ error }}</p>
+            {% endfor %}
+          {% endif %}
+        </div>
+
+        {{ form.submit(class="btn-regress") }}
+      </form>
+    </div>
+  </main>
+{% endblock %}
