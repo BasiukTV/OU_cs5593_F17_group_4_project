@@ -11,9 +11,11 @@ body {
 a {
   text-decoration: none;
   display: inline-block;
+  margin: 5px;
 }
 
 .container {
+  width: 1000px;
   margin: 0 auto;
 }
 
@@ -23,6 +25,11 @@ a {
 
 .section-content {
   color: #3a3a3a;
+}
+
+header {
+  background-color: #fff;
+  padding: 25px 0;
 }
 
 .title {
@@ -36,6 +43,7 @@ a {
 .title a, .title a:visited {
   color: #3a3a3a;
 }
+
 .hero-section .section-content {
   position: relative;
   top: 100px;
@@ -48,45 +56,5 @@ a {
 }
 
 .btn-regression{
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  color: #3a3a3a;
-  display: block;
-  font-family: 'Open Sans', sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 5px;
-}
-
-.form-group input {
-  border: none;
-  border-bottom: 2px solid #4285f4;
-  background-color: transparent;
-  color: #3a3a3a;
-  font-size: 18px;
-  padding: 5px 0;
-  width: 100%;
-}
-
-.form-group input:focus {
-  outline: 0;
-}
-
-.form-group .error-message {
-  margin: 10px 0;
-  color: #db4437;
-}
-
-.form-group .error-message + input {
-  border-bottom: 2px solid #db4437;
-}
-
-.error-message {
-  color: #db4437;
 }
 
