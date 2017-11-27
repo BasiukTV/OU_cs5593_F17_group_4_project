@@ -18,8 +18,18 @@ class KMeansModel(ClusterModel):
         self.centroids = centroids
 
     def cluster_contributor(self, contributor_record):
-        # TODO Implement this
-        pass
+        # TODO Preprocess contributor record
+
+        p = [] # p = contributor_record.tolist()
+        min_dist = 0.0
+        index_of_min = 0
+
+        for i in range(len(self.centroids)):
+            dist = getDistance(p, self.centroid[i])
+            if dist < min_dist:
+                index_of_min = i
+                min_dist = dist
+        return index_of_min + 1
 
     def serialize_to_file(self, path_to_model):
         with open(path_to_model + '.pickle', 'wb') as fp:
