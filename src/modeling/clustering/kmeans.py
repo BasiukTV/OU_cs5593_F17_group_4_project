@@ -1,5 +1,6 @@
 import os, sys
 import math, random
+import pickle
 
 # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
 # TODO Below is dirty and probably not how things should be
@@ -11,45 +12,46 @@ from modeling.modeling import Modeling
 from modeling.clustering.cluster_model import ClusterModel
 
 class KMeansModel(ClusterModel):
-    def __init__(self):
+    def __init__(self, centroids):
         # TODO This simply calls super constructor and might need (or not) updates
         super().__init__()
+        self.centroids = centroids
 
     def cluster_contributor(self, contributor_record):
         # TODO Implement this
         pass
 
     def serialize_to_file(self, path_to_model):
-        # TODO Implement this
-        pass
+        with open(path_to_model + '.pickle', 'wb') as fp:
+            pickle.dump(self.centroids, fp)
 
     def deserialize_from_file(self, path_to_model):
-        # TODO Implement this
-        pass
+        with open(path_to_model + '.pickle', 'rb') as fp:
+            return pickle.load(fp)
 
 class KMeansModeling(Modeling):
 
-    def __init__(self, preproc_dataset_path):
+    def __init__(self, preproc_dataset_path, k):
         super().__init__(preproc_dataset_path)
-        # TODO This simply calls super constructor and might need (or not) updates
+        self.k = k
         
         # stop updating centroids when their differences is less than 0.005
         self.diff = 0.0049
-        # list of number of contributor clusters - to choose the adequate k from
-        self.k_list = [2, 3, 4, 5]
-        # a list of each contributor's data
         # TODO get the preprocessed and aggregated data for each contributor
-        self.data_list = [[]]
- 
-    def do_kmeans_clustering(self):
-        # for each given k, do k-means clustering
-        for k in self.k_list:
-            clusters = do_kmeans(self.data_list, k, self.diff)
-            #TODO visualization of the clusters    
+
+        # just place holders
+        self.data_list = [[1,2,5,7,9], [2,4,7,0,4], [2,5,8,9,2], [1,8,4,2,6], [1,1,1,1,1], [4,2,3,2,1]]
+        
+        self.centroids = []
+        clusters = do_kmeans(self.data_list, self.k, self.diff)  
+        
+        for c in clusters:
+            self.centroids.append(c.centroid)                  
 
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
-        return KMeansModel()
+        
+        return KMeansModel(self.centroids)
 
 def do_kmeans(points, k, diff):
     # k random points to use as our initial centroids
@@ -145,11 +147,11 @@ if  __name__ == "__main__":
     # Configuring CLI arguments parser and parsing the arguments
     parser = argparse.ArgumentParser("Script for creating a kmeans clustering model of GitHub contributors.")
     parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
-    parser.add_argument("-k", "--clusters", help="Chosen k clusters.")
+    parser.add_argument("-k", "--clusters", type=int, help="Chosen k clusters.")
     args = parser.parse_args()
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
-    modeling = KMeansModeling(args.dataset)
+    modeling = KMeansModeling(args.dataset, args.clusters)
     model = modeling.run_modeling("not_actual_cross_validation_params")
     model.serialize_to_file("not_an_anctual_path_to_file")
     pass
