@@ -2,6 +2,7 @@ import os, sys
 import math, random
 import pickle
 import sqlite3
+from sqlite3 import Error
 
 # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
 # TODO Below is dirty and probably not how things should be
@@ -12,6 +13,7 @@ sys.path.insert(0, app_src_dir)
 from modeling.modeling import Modeling
 from modeling.clustering.cluster_model import ClusterModel
 
+'''
 class KMeansModel(ClusterModel):
     def __init__(self, centroids):
         # TODO This simply calls super constructor and might need (or not) updates
@@ -39,6 +41,7 @@ class KMeansModel(ClusterModel):
     def deserialize_from_file(self, path_to_model):
         with open(path_to_model + '.pickle', 'rb') as fp:
             return pickle.load(fp)
+'''
 
 def select_contributors(conn):
     cur = conn.cursor()
@@ -67,6 +70,16 @@ def create_db_connection(db_file):
 
     return None
 
+def update_user_cluster(conn, cluster, contributor_ids):
+    cur = conn.cursor()
+    
+    for cid in contributor_ids:
+        cur.execute('''update user set cluster = %d where id = %d''' %(cluster, cid))        
+
+    #formatted_qry = '''update user set cluster = ? where id in ({})'''.format(','.join('?' * len(contributor_ids)))
+    #print('formated qry = ', formatted_qry)
+    #cur.execute(formatted_qry, (cluster, contributor_ids))
+
 class KMeansModeling(Modeling):
 
     def __init__(self, preproc_dataset_path, k):
@@ -76,22 +89,25 @@ class KMeansModeling(Modeling):
         # stop updating centroids when their differences is less than 0.005
         self.diff = 0.0049
        
+        db_file = '../../../samples/data/preproc/sample.sqlite3'
         # get contributors data from database
-        self.data_list = getContributorsData('../../../samples/data/preproc/sample.sqlite3')       
+        self.data_list = getContributorsData(db_file)       
 
         self.centroids = []
-        clusters = do_kmeans(self.data_list, self.k, self.diff)  
+        clusters = do_kmeans(self.data_list, self.k, self.diff)          
         
+        conn = create_db_connection(db_file)
+
         for i in range(len(clusters)):
-            self.centroids.append(clusters[i].centroid)
-            print('#### Cluster %s ########' %i)
-            print(clusters[i].points)  
-            print('###########################################################')                
+            with conn:
+                update_user_cluster(conn, i+1, [p[0] for p in clusters[i].points])
+                #print('#### Cluster %s ########' %i)
+                #print(clusters[i].points)  
+                #print('###########################################################')                
 
     def run_modeling(self, cross_validation_params):
-        # TODO Implement this
-        
-        return KMeansModel(self.centroids)
+        # TODO Implement this        
+        pass
 
 def do_kmeans(points, k, diff):
     # k random points to use as our initial centroids
@@ -168,7 +184,7 @@ class Cluster(object):
         unzipped = zip(*coords)
         # Calculate the mean for each dimension
         centroid_coords = [math.fsum(dList)/numPoints for dList in unzipped]
-        #print("Centroid is %s" %(str(centroid_coords)))
+        # print("Centroid is %s" %(str(centroid_coords)))
         return centroid_coords
 
 def getDistance(a, b):
