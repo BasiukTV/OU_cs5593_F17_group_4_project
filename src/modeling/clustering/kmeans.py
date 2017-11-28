@@ -1,6 +1,5 @@
 import os, sys
 import math, random
-import pickle
 import sqlite3
 from sqlite3 import Error
 
@@ -11,37 +10,6 @@ app_src_dir = os.path.realpath(app_home_dir + "/src")
 sys.path.insert(0, app_src_dir)
 
 from modeling.modeling import Modeling
-from modeling.clustering.cluster_model import ClusterModel
-
-'''
-class KMeansModel(ClusterModel):
-    def __init__(self, centroids):
-        # TODO This simply calls super constructor and might need (or not) updates
-        super().__init__()
-        self.centroids = centroids
-
-    def cluster_contributor(self, contributor_record):
-        # TODO Preprocess contributor record
-
-        p = [] # p = contributor_record.tolist()
-        min_dist = 0.0
-        index_of_min = 0
-
-        for i in range(len(self.centroids)):
-            dist = getDistance(p[1:], self.centroid[i])
-            if dist < min_dist:
-                index_of_min = i
-                min_dist = dist
-        return index_of_min + 1
-
-    def serialize_to_file(self, path_to_model):
-        with open(path_to_model + '.pickle', 'wb') as fp:
-            pickle.dump(self.centroids, fp)
-
-    def deserialize_from_file(self, path_to_model):
-        with open(path_to_model + '.pickle', 'rb') as fp:
-            return pickle.load(fp)
-'''
 
 def select_contributors(conn):
     cur = conn.cursor()
@@ -90,6 +58,7 @@ class KMeansModeling(Modeling):
         self.diff = 0.0049
        
         db_file = '../../../samples/data/preproc/sample.sqlite3'
+
         # get contributors data from database
         self.data_list = getContributorsData(db_file)       
 
@@ -205,9 +174,8 @@ if  __name__ == "__main__":
     parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
     parser.add_argument("-k", "--clusters", type=int, help="Chosen k clusters.")
     args = parser.parse_args()
-
-    # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
-    modeling = KMeansModeling(args.dataset, args.clusters)
+   
+    # invoke k-means algorithm
+    KMeansModeling(args.dataset, args.clusters)
     #model = modeling.run_modeling("not_actual_cross_validation_params")
-    #model.serialize_to_file("not_an_anctual_path_to_file")
     pass
