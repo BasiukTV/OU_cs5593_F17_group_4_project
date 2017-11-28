@@ -1,6 +1,7 @@
 import os, sys
 import math, random
 import pickle
+import sqlite3
 
 # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
 # TODO Below is dirty and probably not how things should be
@@ -25,7 +26,7 @@ class KMeansModel(ClusterModel):
         index_of_min = 0
 
         for i in range(len(self.centroids)):
-            dist = getDistance(p, self.centroid[i])
+            dist = getDistance(p[1:], self.centroid[i])
             if dist < min_dist:
                 index_of_min = i
                 min_dist = dist
@@ -39,6 +40,33 @@ class KMeansModel(ClusterModel):
         with open(path_to_model + '.pickle', 'rb') as fp:
             return pickle.load(fp)
 
+def select_contributors(conn):
+    cur = conn.cursor()
+    cur.execute('select contributorID, sum(repos_started_count), sum(repos_forked_count), sum(code_pushed_count), sum(pull_request_created_count), sum(pull_request_reviewed_count), sum(issue_created_count), sum(issue_resolved_count), sum(issue_commented_count), sum(issue_other_activity_count), sum(owned_repos_starts_count) from contributor group by contributorID')
+
+    rows = cur.fetchall()
+
+    contributors_data = []    
+    for row in rows:
+       contributors_data.append(list(row))
+
+    return contributors_data
+
+def getContributorsData(db_file):
+    conn = create_db_connection(db_file)
+    
+    with conn:
+        return select_contributors(conn)   
+       
+def create_db_connection(db_file):
+    try:
+        conn = sqlite3.connect(db_file)
+        return conn
+    except Error as e:
+        print(e)
+
+    return None
+
 class KMeansModeling(Modeling):
 
     def __init__(self, preproc_dataset_path, k):
@@ -47,16 +75,18 @@ class KMeansModeling(Modeling):
         
         # stop updating centroids when their differences is less than 0.005
         self.diff = 0.0049
-        # TODO get the preprocessed and aggregated data for each contributor
+       
+        # get contributors data from database
+        self.data_list = getContributorsData('../../../samples/data/preproc/sample.sqlite3')       
 
-        # just place holders
-        self.data_list = [[1,2,5,7,9], [2,4,7,0,4], [2,5,8,9,2], [1,8,4,2,6], [1,1,1,1,1], [4,2,3,2,1]]
-        
         self.centroids = []
         clusters = do_kmeans(self.data_list, self.k, self.diff)  
         
-        for c in clusters:
-            self.centroids.append(c.centroid)                  
+        for i in range(len(clusters)):
+            self.centroids.append(clusters[i].centroid)
+            print('#### Cluster %s ########' %i)
+            print(clusters[i].points)  
+            print('###########################################################')                
 
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
@@ -80,7 +110,7 @@ def do_kmeans(points, k, diff):
         counter += 1
         for p in points:
             # distance between the point and the centroid of the first cluster
-            smallest_distance = getDistance(p, clusters[0].centroid)
+            smallest_distance = getDistance(p[1:], clusters[0].centroid)
 
             # set the cluster this point belongs to
             clusterIndex = 0
@@ -88,7 +118,7 @@ def do_kmeans(points, k, diff):
             # for the rest of the clusters
             for i in range(clusterCount - 1):
                 # calculate the distance of that point to each other cluster's centroid
-                distance = getDistance(p, clusters[i+1].centroid)
+                distance = getDistance(p[1:], clusters[i+1].centroid)
                 # if closer to that cluster's centroid then
                 if distance < smallest_distance:
                     smallest_distance = distance
@@ -132,8 +162,8 @@ class Cluster(object):
     def calculateCentroid(self):
         ''' Find a virtual center point for a group of n-dimensional points '''
         numPoints = len(self.points)
-        # print("Points = %s" % (str(self.points)))
-        coords = [p for p in self.points]
+        # data except for the one in index 0
+        coords = [p[1:] for p in self.points]
         # Reformat that so all x's are together, all y'z, and so on.
         unzipped = zip(*coords)
         # Calculate the mean for each dimension
@@ -162,6 +192,6 @@ if  __name__ == "__main__":
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
     modeling = KMeansModeling(args.dataset, args.clusters)
-    model = modeling.run_modeling("not_actual_cross_validation_params")
-    model.serialize_to_file("not_an_anctual_path_to_file")
+    #model = modeling.run_modeling("not_actual_cross_validation_params")
+    #model.serialize_to_file("not_an_anctual_path_to_file")
     pass
