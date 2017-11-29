@@ -95,6 +95,10 @@ def initialize_repo_table(con):
         finished integer
         )''')
     con.execute('''INSERT INTO repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time, 0 FROM repo_creations''')
+    con.execute('''CREATE TABLE repo_contributors (
+        repo_id integer,
+        contributor_id integer
+        )''')
 
 def create_indices(con, tables):
     for table in tables:
@@ -273,7 +277,7 @@ def aggregate_repository(con, stoptime, offset):
     repo_count = con.execute("SELECT count(*) FROM repo WHERE finished = 0").fetchone()[0]
     finished_with = 0
 
-    for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo WHERE finished = 0"):
+    for (id, owner, name, creation_date) in con.execute("SELECT id, owner, name, creation_date FROM repo WHERE finished = 0 ORDER BY RANDOM()"):
         cur_week = parse_isotime(creation_date)
         cur_week_iso = cur_week.isoformat()
         while cur_week < stoptime:
@@ -281,15 +285,16 @@ def aggregate_repository(con, stoptime, offset):
             next_week_iso = next_week.isoformat()
             star_count = count_repo_event(con, cur_week_iso, next_week_iso, owner, name, "starrings")
             # TODO what is a contribution?
-            # TODO don't only consider id, but also names
-            total_contributor_count = con.execute("""
-                SELECT count(actor_id)
+            # TODO duplicates
+            con.execute("""
+                INSERT INTO repo_contributors
+                SELECT DISTINCT ?, actor_id
                 FROM pushes
                 WHERE repo_owner_name = ?
                   AND repo_name = ?
                   AND time >= ? AND time < ?
-            """, (owner, name, cur_week_iso, next_week_iso)).fetchone()[0]
-            # TODO outsource the classification
+            """, (id, owner, name, cur_week_iso, next_week_iso))
+            total_contributor_count = None
             contributor_type1_count = None
             contributor_type2_count = None
             contributor_type3_count = None
@@ -335,9 +340,9 @@ def aggregate_repository(con, stoptime, offset):
         # status report
         con.execute("UPDATE repo SET finished = 1 WHERE id = ?", (id, ))
         finished_with += 1
-        # if finished_with % 1000 == 0:
-        con.commit()
-        elog("Finished with {}/{} repos".format(finished_with, repo_count))
+        if finished_with % 100 == 0:
+            con.commit()
+            elog("Finished with {}/{} repos".format(finished_with, repo_count))
 
 # move from intermediate parsed database to the aggregated format
 def aggregate_data(database_file):
