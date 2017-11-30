@@ -1,0 +1,60 @@
+html, body, h1 {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #f4f4f4;
+  font-family: 'Open Sans', sans-serif;
+}
+
+a {
+  text-decoration: none;
+  display: inline-block;
+  margin: 5px;
+}
+
+.container {
+  width: 1000px;
+  margin: 0 auto;
+}
+
+.clearfix {
+  clear: both;
+}
+
+.section-content {
+  color: #3a3a3a;
+}
+
+header {
+  background-color: #fff;
+  padding: 25px 0;
+}
+
+.title {
+  float: left;
+  font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
+  font-size: 17px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+.title a, .title a:visited {
+  color: #3a3a3a;
+}
+
+.hero-section .section-content {
+  position: relative;
+  top: 100px;
+}
+
+.btn-preprocess{
+}
+
+.btn-cluster{
+}
+
+.btn-regression{
+}
+

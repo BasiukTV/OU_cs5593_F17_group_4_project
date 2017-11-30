@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+
+{% block content %}
+  <main class="container">
+    <div class="section-content">
+      <form method="GET" action="/preprocess">
+        <div class="form-group">
+          <p/>
+          {{ form.fpath.label }} {{ form.fpath }}
+        </div>
+
+        {{ form.submit(class="btn-preprocess") }}
+      </form>
+    </div>
+  </main>
+{% endblock %}

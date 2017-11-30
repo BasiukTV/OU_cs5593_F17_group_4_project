@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+
+{% block content %}
+  <main class="container">
+    <div class="section-content">
+      <form method="GET" action="/cluster">
+        <div class="form-group">
+        {% for subfield in form.clusteringAlgorithms %}
+          <p/>
+          {{ subfield }} 
+          {{ subfield.label }} 
+        {% endfor %}          
+        </div>
+        {{ form.submit(class="btn-cluster") }}
+      </form>
+    </div>
+  </main>
+{% endblock %}

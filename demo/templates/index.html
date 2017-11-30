@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+
+{% block content %}
+  <main class="hero-section">
+    <div class="container">
+      
+      <div class="section-content">
+        <a href="{{ url_for('preprocess') }}" class="btn-preprocess">Preprocess</a>
+        <a href="{{ url_for('cluster') }}" class="btn-cluster">Cluster</a> 
+        <a href="{{ url_for('regress') }}" class="btn-regress">Classify</a>
+      </div>
+      
+      <div class="clearfix"></div>
+
+    </div>
+  </main>
+{% endblock %}
