@@ -37,6 +37,9 @@ class HierarchicalModeling(Modeling):
     def run_modeling(self, cross_validation_params):
         from database.sqlite.preproc_db_sqlite import SQLitePreprocessingDatabase
 
+        log("Starting hierarchical clustering of the contributors.")
+        log("Connecting to the dataset at '{}'".format(self.preproc_dataset_path))
+
         """
             Altough at the moment our preprocesssed dataset is created with src/preproc/aggregate.py,
             which doesn't use any abstractions for setting up the DB, it appears to be compatible with
@@ -46,8 +49,10 @@ class HierarchicalModeling(Modeling):
         """
         db = SQLitePreprocessingDatabase(endpoint = self.preproc_dataset_path, existing = True)
 
-        # TODO Below line is just a test of accesing DB. Remove it.
-        log(db.db_connection.cursor().execute("SELECT * FROM sqlite_master").fetchall())
+        log("Retrieving the list of available contibutor IDs from the dataset.")
+        contributor_IDs = db.get_contributor_IDs()
+        con_num = len(contributor_IDs) # Number of available contributors
+        log("Retrieved {} unique contributor IDs.".format(con_num))
 
         db.close()
 

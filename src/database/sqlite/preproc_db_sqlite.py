@@ -138,6 +138,13 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
             self.db_connection.commit()
         return
 
+    def get_contributor_IDs(self):
+        """Return list of contributors for whom there's data in the dataset."""
+        with self.lock:
+            return list(map(
+                lambda x: x[0],
+                self.db_connection.cursor().execute("SELECT DISTINCT contributorID FROM contributor").fetchall()))
+
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
         """Merges data from an intermidiate preprocessing database into this database."""
         # TODO Implement this

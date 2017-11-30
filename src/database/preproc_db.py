@@ -23,6 +23,11 @@ class PreprocessingDatabase(ABC):
         pass
 
     @abstractmethod
+    def get_contributor_IDs(self):
+        """Return list of contributors for whom there's data in the dataset."""
+        pass
+
+    @abstractmethod
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
         """Merges data from an intermidiate preprocessing database into this database."""
         pass
