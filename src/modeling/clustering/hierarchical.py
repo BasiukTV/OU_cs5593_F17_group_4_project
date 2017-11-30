@@ -35,6 +35,7 @@ class HierarchicalModeling(Modeling):
         # TODO This simply calls super constructor and might need (or not) updates
 
     def run_modeling(self, cross_validation_params):
+        import random
         from database.sqlite.preproc_db_sqlite import SQLitePreprocessingDatabase
 
         log("Starting hierarchical clustering of the contributors.")
@@ -53,6 +54,19 @@ class HierarchicalModeling(Modeling):
         contributor_IDs = db.get_contributor_IDs()
         con_num = len(contributor_IDs) # Number of available contributors
         log("Retrieved {} unique contributor IDs.".format(con_num))
+
+        trial_size = 100 # TODO Make this configurable
+        log("Starting clustering trial #1 with {} contributors.".format(trial_size))
+
+        # Sample (with no replacement, as it slows things down) contributors for the trial.
+        trial = random.sample(contributor_IDs, trial_size)
+
+        for contributor in trial:
+            tmp = db.get_contributor_weekly_averages(contributor)
+            print(tmp)
+
+        log("Trial #1 is done.")
+        log("Hierarchical clustering is done.")
 
         db.close()
 

@@ -28,6 +28,11 @@ class PreprocessingDatabase(ABC):
         pass
 
     @abstractmethod
+    def get_contributor_weekly_averages(self, contributorID):
+        """Returns Contributor record which holds average weekly contributions for given contributorID. """
+        pass
+
+    @abstractmethod
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
         """Merges data from an intermidiate preprocessing database into this database."""
         pass

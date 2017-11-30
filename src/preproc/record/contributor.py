@@ -32,3 +32,21 @@ class Contributor(Record):
         self.owned_repos_starts_count = owned_repos_starts_count
         self.reserve1 = reserve1
         self.reserve2 = reserve2
+
+    # Below overrides string representation of the Contributor object. For printing and debugging.
+    def __str__(self):
+        return "Contributor: {},{},{},{},{},{},{},{},{},{},{},{},{},{}".format(
+            self.entityID,
+            self.timestamp,
+            self.repos_started_count,
+            self.repos_forked_count,
+            self.code_pushed_count,
+            self.pull_request_created_count,
+            self.pull_request_reviewed_count,
+            self.issue_created_count,
+            self.issue_resolved_count,
+            self.issue_commented_count,
+            self.issue_other_activity_count,
+            self.owned_repos_starts_count,
+            self.reserve1,
+            self.reserve2)

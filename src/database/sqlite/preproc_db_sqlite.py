@@ -4,6 +4,7 @@ from threading import Lock
 
 # This application modules imports
 from database.preproc_db import PreprocessingDatabase
+from preproc.record.contributor import Contributor
 
 class SQLitePreprocessingDatabase(PreprocessingDatabase):
     """SQLIte class for the database instance used for hosting preprocessed data."""
@@ -144,6 +145,68 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
             return list(map(
                 lambda x: x[0],
                 self.db_connection.cursor().execute("SELECT DISTINCT contributorID FROM contributor").fetchall()))
+
+    def get_contributor_weekly_averages(self, contributorID):
+        """Returns Contributor record which holds average weekly contributions for given contributorID. """
+
+        # Get every available contributor record for given contributorID
+        dataset_contributor_rows = None
+        with self.lock:
+            dataset_contributor_rows = self.db_connection.cursor().execute("""
+                SELECT timestamp,
+                       repos_started_count,
+                       repos_forked_count,
+                       code_pushed_count,
+                       pull_request_created_count,
+                       pull_request_reviewed_count,
+                       issue_created_count,
+                       issue_resolved_count,
+                       issue_commented_count,
+                       issue_other_activity_count,
+                       owned_repos_starts_count
+                FROM contributor
+                WHERE contributorID = {}""".format(contributorID)).fetchall()
+
+        """
+            As there are contributor records for every week in the dataset (most filled with zeros)
+            we ignore fetched timestamps and just assume number of records is the number of weeks
+            contributor was actibe on GitHub.
+
+            TODO Actually process timestamps.
+        """
+        weeks_num = len(dataset_contributor_rows)
+
+        result = Contributor(
+            contributorID=contributorID,
+            timestamp=0) # Timestamp is meaningless for weekly overage record
+
+        # TODO Below operations should be defined within Contributor object
+        # Accumulate weekly contributions
+        for row in dataset_contributor_rows:
+            result.repos_started_count += row[1]
+            result.repos_forked_count += row[2]
+            result.code_pushed_count += row[3]
+            result.pull_request_created_count += row[4]
+            result.pull_request_reviewed_count += row[5]
+            result.issue_created_count += row[6]
+            result.issue_resolved_count += row[7]
+            result.issue_commented_count += row[8]
+            result.issue_other_activity_count += row[9]
+            result.owned_repos_starts_count += row[10]
+
+        #Average out the contibutions
+        result.repos_started_count /= weeks_num
+        result.repos_forked_count /= weeks_num
+        result.code_pushed_count /= weeks_num
+        result.pull_request_created_count /= weeks_num
+        result.pull_request_reviewed_count /= weeks_num
+        result.issue_created_count /= weeks_num
+        result.issue_resolved_count /= weeks_num
+        result.issue_commented_count /= weeks_num
+        result.issue_other_activity_count /= weeks_num
+        result.owned_repos_starts_count /= weeks_num
+
+        return result
 
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
         """Merges data from an intermidiate preprocessing database into this database."""
