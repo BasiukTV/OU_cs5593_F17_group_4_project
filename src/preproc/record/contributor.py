@@ -66,3 +66,42 @@ class Contributor(Record):
             weights[7] * (self.issue_commented_count - other.issue_commented_count) ** 2 +
             weights[8] * (self.issue_other_activity_count - other.issue_other_activity_count) ** 2 +
             weights[9] * (self.owned_repos_starts_count - other.owned_repos_starts_count) ** 2)
+
+def calc_avg_contribution(contributors, resultID=0, resultTimestamp=0):
+    """
+        Returns a Contributor record which contains attributes whose values are average
+        across given list of contributors. As averaging out contibutor ID and record timestamp
+        dosen't make a lot of sense they're set to given values.
+    """
+    result = Contributor(
+        contributorID=resultID,
+        timestamp=resultTimestamp)
+
+    num = len(contributors)
+
+    # Accumulate overall contributions
+    for c in contributors:
+        result.repos_started_count += c.repos_started_count
+        result.repos_forked_count += c.repos_forked_count
+        result.code_pushed_count += c.code_pushed_count
+        result.pull_request_created_count += c.pull_request_created_count
+        result.pull_request_reviewed_count += c.pull_request_reviewed_count
+        result.issue_created_count += c.issue_created_count
+        result.issue_resolved_count += c.issue_resolved_count
+        result.issue_commented_count += c.issue_commented_count
+        result.issue_other_activity_count += c.issue_other_activity_count
+        result.owned_repos_starts_count += c.owned_repos_starts_count
+
+    #Average out the contibutions
+    result.repos_started_count /= num
+    result.repos_forked_count /= num
+    result.code_pushed_count /= num
+    result.pull_request_created_count /= num
+    result.pull_request_reviewed_count /= num
+    result.issue_created_count /= num
+    result.issue_resolved_count /= num
+    result.issue_commented_count /= num
+    result.issue_other_activity_count /= num
+    result.owned_repos_starts_count /= num
+
+    return result

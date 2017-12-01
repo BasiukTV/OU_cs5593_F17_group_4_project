@@ -4,7 +4,7 @@ from threading import Lock
 
 # This application modules imports
 from database.preproc_db import PreprocessingDatabase
-from preproc.record.contributor import Contributor
+from preproc.record.contributor import Contributor, calc_avg_contribution
 
 class SQLitePreprocessingDatabase(PreprocessingDatabase):
     """SQLIte class for the database instance used for hosting preprocessed data."""
@@ -153,7 +153,8 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
         dataset_contributor_rows = None
         with self.lock:
             dataset_contributor_rows = self.db_connection.cursor().execute("""
-                SELECT timestamp,
+                SELECT contributorID,
+                       timestamp,
                        repos_started_count,
                        repos_forked_count,
                        code_pushed_count,
@@ -167,6 +168,23 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
                 FROM contributor
                 WHERE contributorID = {}""".format(contributorID)).fetchall()
 
+        # Convert database output into list of contributor records
+        contributors = []
+        for row in dataset_contributor_rows:
+            contributors.append(Contributor(
+                contributorID = row[0],
+                timestamp = row[1],
+                repos_started_count = row[2],
+                repos_forked_count = row[3],
+                code_pushed_count = row[4],
+                pull_request_created_count = row[5],
+                pull_request_reviewed_count = row[6],
+                issue_created_count = row[7],
+                issue_resolved_count = row[8],
+                issue_commented_count = row[9],
+                issue_other_activity_count = row[10],
+                owned_repos_starts_count = row[11]))
+
         """
             As there are contributor records for every week in the dataset (most filled with zeros)
             we ignore fetched timestamps and just assume number of records is the number of weeks
@@ -174,39 +192,9 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
 
             TODO Actually process timestamps.
         """
-        weeks_num = len(dataset_contributor_rows)
-
-        result = Contributor(
-            contributorID=contributorID,
-            timestamp=0) # Timestamp is meaningless for weekly overage record
-
-        # TODO Below operations should be defined within Contributor object
-        # Accumulate weekly contributions
-        for row in dataset_contributor_rows:
-            result.repos_started_count += row[1]
-            result.repos_forked_count += row[2]
-            result.code_pushed_count += row[3]
-            result.pull_request_created_count += row[4]
-            result.pull_request_reviewed_count += row[5]
-            result.issue_created_count += row[6]
-            result.issue_resolved_count += row[7]
-            result.issue_commented_count += row[8]
-            result.issue_other_activity_count += row[9]
-            result.owned_repos_starts_count += row[10]
-
-        #Average out the contibutions
-        result.repos_started_count /= weeks_num
-        result.repos_forked_count /= weeks_num
-        result.code_pushed_count /= weeks_num
-        result.pull_request_created_count /= weeks_num
-        result.pull_request_reviewed_count /= weeks_num
-        result.issue_created_count /= weeks_num
-        result.issue_resolved_count /= weeks_num
-        result.issue_commented_count /= weeks_num
-        result.issue_other_activity_count /= weeks_num
-        result.owned_repos_starts_count /= weeks_num
-
-        return result
+        return calc_avg_contribution(contributors,
+            resultID=contributorID,
+            resultTimestamp=0)  # Timestamp is meaningless for weekly average record
 
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
         """Merges data from an intermidiate preprocessing database into this database."""
