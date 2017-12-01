@@ -153,12 +153,12 @@ def count_contributor_event(con, name_attr, time_start, time_end, aliases, event
 
 # create all the entries in the contributor table
 def aggregate_contributor(con, stoptime, offset):
-    contributor_count = con.execute("SELECT count(*) FROM main.user WHERE finished = 0").fetchone()[0]
+    contributor_count = con.execute("SELECT count(*) FROM OUT.user WHERE finished = 0").fetchone()[0]
     finished_with = 0
 
-    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM main.user WHERE finished = 0 ORDER BY RANDOM()"):
+    for (user_id, first_encounter) in con.execute("SELECT id, first_encounter FROM OUT.user WHERE finished = 0 ORDER BY RANDOM()"):
         aliases = []
-        for alias in con.execute("SELECT name, first_encounter FROM main.user_name where id = ? ORDER BY first_encounter", (user_id,)):
+        for alias in con.execute("SELECT name, first_encounter FROM OUT.user_name where id = ? ORDER BY first_encounter", (user_id,)):
             aliases = aliases + [ alias ]
         cur_week = parse_isotime(first_encounter)
         cur_week_iso = cur_week.isoformat()
@@ -207,7 +207,7 @@ def aggregate_contributor(con, stoptime, offset):
             cur_week_iso = next_week_iso
 
         # status report
-        con.execute("UPDATE main.user SET finished = 1 WHERE id = ?", (user_id, ))
+        con.execute("UPDATE OUT.user SET finished = 1 WHERE id = ?", (user_id, ))
         finished_with += 1
         if finished_with % 100 == 0:
             con.commit()
@@ -258,10 +258,10 @@ def initialize_user_table(con, tables):
             # if we already encountered the name before (just without an ID), use that as the first encounter date
             if unknown_ids.get(actor_name) is not None:
                 first_encounter = unknown_ids.pop(actor_name)
-                con.execute("UPDATE main.user SET first_encounter = min(first_encounter, ?) WHERE id = ?", (first_encounter, actor_id))
+                con.execute("UPDATE OUT.user SET first_encounter = min(first_encounter, ?) WHERE id = ?", (first_encounter, actor_id))
 
-            con.execute("INSERT OR IGNORE INTO main.user VALUES (?, ?, 0)", (actor_id, first_encounter))
-            con.execute("INSERT OR IGNORE INTO main.user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
+            con.execute("INSERT OR IGNORE INTO OUT.user VALUES (?, ?, 0)", (actor_id, first_encounter))
+            con.execute("INSERT OR IGNORE INTO OUT.user_name VALUES (?, ?, ?)", (actor_id, actor_name, first_encounter))
         elif actor_name is not None:
             unknown_ids[actor_name] = first_encounter
             # con.execute("INSERT OR IGNORE INTO user_name VALUES (-1, ?, ?)", (actor_name, first_encounter)) # TODO analyze
@@ -274,8 +274,8 @@ def initialize_user_table(con, tables):
     # I'm assuming renaming probably wasn't possible back then.
     # So just assign them fake IDs (negative).
     for (i, (actor_name, first_encounter)) in enumerate(unknown_ids.items(), 1):
-        con.execute("INSERT INTO main.user VALUES (?, ?, 0)", (-i, first_encounter))
-        con.execute("INSERT INTO main.user_name VALUES (?, ?, ?)", (-i, actor_name, first_encounter))
+        con.execute("INSERT INTO OUT.user VALUES (?, ?, 0)", (-i, first_encounter))
+        con.execute("INSERT INTO OUT.user_name VALUES (?, ?, ?)", (-i, actor_name, first_encounter))
 
 
 # create all the entries in the repository table
