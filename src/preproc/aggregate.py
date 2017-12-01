@@ -225,8 +225,7 @@ def initialize_user_table(con, tables):
     con.execute('''CREATE TABLE IF NOT EXISTS OUT.user (
         id integer PRIMARY KEY,
         first_encounter text,
-        finished integer,
-        primary key (id, first_encounter)
+        finished integer
         )''')
     con.execute('''CREATE TABLE IF NOT EXISTS OUT.user_name (
         id integer,
