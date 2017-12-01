@@ -56,7 +56,8 @@ def setup_db(con):
             issue_resolved_count integer,
             org_activity_count integer,
             reserve1 integer,
-            reserve2 text
+            reserve2 text,
+            primary key (repositoryID, timestamp)
         )""")
     con.execute("""
         CREATE TABLE IF NOT EXISTS OUT.contributor (
@@ -74,7 +75,8 @@ def setup_db(con):
             issue_other_activity_count integer,
             owned_repos_stars_count integer,
             reserve1 integer,
-            reserve2 text
+            reserve2 text,
+            primary key (contributorID, timestamp)
         )""")
     # TODO probably better to create this index after all the insertions, as creating it once should
     # be faster than updating it all the time
@@ -96,7 +98,8 @@ def initialize_repo_table(con):
         )''')
     con.execute('''CREATE TABLE IF NOT EXISTS OUT.repo_contributors (
         repo_id integer,
-        contributor_id integer
+        contributor_id integer,
+        primary key (repo_id, contributor_id)
         )''')
     con.commit()
     # con.execute('''INSERT INTO OUT.repo SELECT DISTINCT Null, repo_id, repo_name, repo_owner_name, time, 0 FROM repo_creations''')
@@ -222,7 +225,8 @@ def initialize_user_table(con, tables):
     con.execute('''CREATE TABLE IF NOT EXISTS main.user (
         id integer PRIMARY KEY,
         first_encounter text,
-        finished integer
+        finished integer,
+        primary key (id, first_encounter)
         )''')
     con.execute('''CREATE TABLE IF NOT EXISTS main.user_name (
         id integer,
@@ -236,7 +240,8 @@ def initialize_user_table(con, tables):
         con.execute('''CREATE TABLE all_actor_events (
             actor_id int,
             actor_name int,
-            time int
+            time int,
+            primary key (actor_id, time)
         )''')
 
         for table in tables:
@@ -386,7 +391,7 @@ def aggregate_data(database_in_file, database_out_file):
     offset = timedelta(days = 7)
 
     log("aggregating data")
-    contributor_full(con, std_tables, stoptime, offset)
+    # contributor_full(con, std_tables, stoptime, offset)
     repo_full(con, std_tables, stoptime, offset)
     con.close()
 
