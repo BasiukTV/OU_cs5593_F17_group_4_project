@@ -22,8 +22,8 @@ def delete_indices(con):
 
 def drop_tables(con):
     con.execute("DROP TABLE IF EXISTS OUT.repository");
-    con.execute("DROP TABLE IF EXISTS main.user");
-    con.execute("DROP TABLE IF EXISTS main.user_name");
+    con.execute("DROP TABLE IF EXISTS OUT.user");
+    con.execute("DROP TABLE IF EXISTS OUT.user_name");
     con.execute("DROP TABLE IF EXISTS OUT.contributor");
 
 # for testing purposes, make sure to remove all results of the last run
@@ -222,13 +222,13 @@ def initialize_user_table(con, tables):
         log("Skipping user table initialization, as it apparently is already initialized")
         return
 
-    con.execute('''CREATE TABLE IF NOT EXISTS main.user (
+    con.execute('''CREATE TABLE IF NOT EXISTS OUT.user (
         id integer PRIMARY KEY,
         first_encounter text,
         finished integer,
         primary key (id, first_encounter)
         )''')
-    con.execute('''CREATE TABLE IF NOT EXISTS main.user_name (
+    con.execute('''CREATE TABLE IF NOT EXISTS OUT.user_name (
         id integer,
         name text,
         first_encounter text,
@@ -391,7 +391,7 @@ def aggregate_data(database_in_file, database_out_file):
     offset = timedelta(days = 7)
 
     log("aggregating data")
-    # contributor_full(con, std_tables, stoptime, offset)
+    contributor_full(con, std_tables, stoptime, offset)
     repo_full(con, std_tables, stoptime, offset)
     con.close()
 
