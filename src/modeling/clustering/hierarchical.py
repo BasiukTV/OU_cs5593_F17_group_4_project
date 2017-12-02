@@ -74,12 +74,13 @@ class HierarchicalModeling(Modeling):
 
         log("Trial #{} : Building initial proximity matrix.".format(trial_num))
         proximity = {}
-        for c1_ID in trial_contributorIDs:
+        for i in range(trial_size):
+            c1_ID = trial_contributorIDs[i]
             proximity[c1_ID] = {}
-            for c2_ID in trial_contributorIDs:
-                if c1_ID == c2_ID:
-                    proximity[c1_ID][c2_ID] = 0
-                    continue
+
+            # We will only build upper triangular part of the matrix as it is symetric 0-diagonal. 
+            for j in range(i + 1, trial_size):
+                c2_ID = trial_contributorIDs[j]
 
                 proximity[c1_ID][c2_ID] = trial_avg_contributions[c1_ID].eucld_dist(
                     trial_avg_contributions[c2_ID],
