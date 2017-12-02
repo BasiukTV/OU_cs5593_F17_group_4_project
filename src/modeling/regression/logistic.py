@@ -1,4 +1,10 @@
 import os, sys
+import math
+
+# notes
+# https://statisticalhorizons.com/logistic-regression-for-rare-events
+# ~5 *events* per predictor
+# number of events is important ("effective sample size")
 
 # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
 # TODO Below is dirty and probably not how things should be
@@ -55,13 +61,8 @@ def linear_combination(x, a):
 def predict(x, weights):
     # t is a linear combination of the expanatory variables:
     # t = w0 + x1 * w1 + x2 * w2 + ... + xn * wn
-    # for i in range(x.shape[0]):
-    for i in range(1,6):
-        t = (linear_combination([i, 1], weights)) # TODO cache
-        res = sigmoid(t)
-        print("hours = {}, probability = {}".format(i, round(res * 100, 2)))
-    # process t through the logistic function to create a probability between 0 and 1 
-    # return sigmoid(t)
+    t = (linear_combination(x, weights))
+    return sigmoid(t)
 
 # likelihood of the given observations occurring with given probabilities (binomial model, assumes independent)
 # this is the function that we (indirectly, through the log) want to maximize
@@ -134,15 +135,19 @@ def logistic_regression(x, y):
     bias = np.ones((num_observations, 1))
 
     design_matrix = np.append(bias, x, 1)
-    
+    transposed_design = np.transpose(design_matrix)
+    # from scipy.sparse import csr_matrix
+    # design_matrix = csr_matrix(design_matrix)
+    # transposed_design = csr_matrix(transposed_design)
+
     change = np.ones(num_variables + 1)
 
     diff = 1
     while diff > THRESH:
         P = probability(design_matrix, weight)
         B = generateB(P)
-        likelihood_gradient = np.transpose(design_matrix).dot(P - y)
-        likelihood_hessian = np.transpose(design_matrix).dot(B.dot(design_matrix))
+        likelihood_gradient = transposed_design.dot(P - y)
+        likelihood_hessian = transposed_design.dot(B.dot(design_matrix))
         hessian_inv_approx = np.linalg.lstsq(likelihood_hessian, np.eye(num_variables + 1, num_variables + 1))[0]
         change = - hessian_inv_approx.dot(likelihood_gradient)
         weight = weight + change
@@ -171,10 +176,10 @@ def logistic_regression(x, y):
 def look_into_future(con, id, current_time):
     # pushes over 1 month in half a year
     pushes = con.execute("""
-        SELECT sum(code_push_count)
+        SELECT sum(code_push_count) + sum(pull_request_resolved_count) + sum(issue_resolved_count) + sum(org_activity_count)
         FROM repository
         WHERE repositoryID = ?
-          AND julianday(timestamp) BETWEEN julianday(?) + 152 AND julianday(?) + 182
+          AND julianday(timestamp) BETWEEN julianday(?) + 91 AND julianday(?) + 182
     """, (id, current_time, current_time)).fetchone()[0]
     return 1 if pushes > 0 else 0
 
@@ -246,21 +251,55 @@ if  __name__ == "__main__":
     # model = modeling.run_modeling("not_actual_cross_validation_params")
     # model.serialize_to_file("not_an_anctual_path_to_file")
 
+    print("Starting parameter building")
+
     con = sqlite3.connect(args.dataset)
     int_count = 0
     total_count = 0
-    training_data = []
-    training_output = []
-    for (id,) in con.execute("select id from repo where finished=1"):
-        result = gather_repo_data(con, id, "2017-03-27")
+    data = []
+    activity = []
+    # I need 182 days to be able to look into the future and 62 days to compute the delta
+    for (id,) in con.execute("SELECT id FROM repo WHERE finished=1 AND julianday(creation_date) <= julianday('2017-03-27') - 244 ORDER BY RANDOM()"):
+        total_count += 1
         active = look_into_future(con, id, "2017-03-27")
-        training_data += [ result ]
-        training_output += [ active ]
+        if active == 1:
+            int_count += 1
 
-    x = np.array(training_data)
-    y = np.array(training_output)
+        result = gather_repo_data(con, id, "2017-03-27")
+        data += [ result ]
+        activity += [ active ]
+    print("{} out of {} are events ({}%)".format(int_count, total_count, round(int_count/total_count * 100, 4)))
+
+    training_cutoff = math.ceil(len(data) * 0.9) # 90% train, rest test
+    x = np.array(data[:training_cutoff])
+    y = np.array(activity[:training_cutoff])
     print("Done building parameters, starting modeling")
-    model = logistic_regression(x, y)
+    import cProfile
+    model = cProfile.run('logistic_regression(x, y)')
     print(model)
-    # print(predict(x, model))
-
+    print("Done modeling, starting test")
+    x = np.array(data[training_cutoff:])
+    y = np.array(activity[training_cutoff:])
+    true_positive = 0
+    true_negative = 0
+    false_positive = 0
+    false_negative = 0
+    for (xi, yi) in zip(x, y):
+        prediction = predict(xi, model)
+        if yi == 1:
+            if xi == 1:
+                true_positive += 1
+            else:
+                false_negative += 1
+        else:
+            if xi == 1:
+                false_positive += 1
+            else:
+                true_negative += 1
+    print("True positive: {}".format(true_positive))
+    print("False positive: {}".format(false_positive))
+    print("True negative: {}".format(true_negative))
+    print("False negative: {}".format(false_negative))
+    print("Total accuracy: {}%".format(round((true_positive + true_negative) / (true_positive + true_negative + false_positive + false_negative) * 100, 2)))
+    print("Event accuracy: {}%".format(round(true_positive / (true_positive + false_negative) * 100, 2)))
+    print("Non-Event accuracy: {}%".format(round(true_negative / (true_negative + false_positive) * 100, 2)))
