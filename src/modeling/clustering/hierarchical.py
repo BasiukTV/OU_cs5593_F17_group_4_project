@@ -9,7 +9,7 @@ sys.path.insert(0, app_src_dir)
 from modeling.modeling import Modeling
 from modeling.clustering.cluster_model import ClusterModel
 
-from utils.logging import log
+from utils.logging import log, progress
 
 class HierarchicalModel(ClusterModel):
     def __init__(self):
@@ -55,17 +55,38 @@ class HierarchicalModeling(Modeling):
         con_num = len(contributor_IDs) # Number of available contributors
         log("Retrieved {} unique contributor IDs.".format(con_num))
 
+        trial_num = 1
         trial_size = 100 # TODO Make this configurable
-        log("Starting clustering trial #1 with {} contributors.".format(trial_size))
+        log("Trial #{} : Starting clustering with {} contributors.".format(trial_num, trial_size))
 
         # Sample (with no replacement, as it slows things down) contributors for the trial.
-        trial = random.sample(contributor_IDs, trial_size)
+        trial_contributorIDs = random.sample(contributor_IDs, trial_size)
+        trial_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        trial_avg_contributions = {}
 
-        for contributor in trial:
-            tmp = db.get_contributor_weekly_averages(contributor)
-            print(tmp)
+        log("Trial #{} : Calculating contribution averages.".format(trial_num))
+        for i in range(trial_size):
+            c_ID = trial_contributorIDs[i]
+            trial_avg_contributions[c_ID] = db.get_contributor_weekly_averages(c_ID)
 
-        log("Trial #1 is done.")
+            progress(i, trial_size)
+        progress(trial_size, trial_size, last=True)
+
+        log("Trial #{} : Building initial proximity matrix.".format(trial_num))
+        proximity = {}
+        for i in range(trial_size):
+            c1_ID = trial_contributorIDs[i]
+            proximity[c1_ID] = {}
+
+            # We will only build upper triangular part of the matrix as it is symetric 0-diagonal. 
+            for j in range(i + 1, trial_size):
+                c2_ID = trial_contributorIDs[j]
+
+                proximity[c1_ID][c2_ID] = trial_avg_contributions[c1_ID].eucld_dist(
+                    trial_avg_contributions[c2_ID],
+                    weights=trial_weights)
+
+        log("Trial #{} : Done.".format(trial_num))
         log("Hierarchical clustering is done.")
 
         db.close()
