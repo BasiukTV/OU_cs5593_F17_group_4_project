@@ -55,17 +55,33 @@ class HierarchicalModeling(Modeling):
         con_num = len(contributor_IDs) # Number of available contributors
         log("Retrieved {} unique contributor IDs.".format(con_num))
 
-        trial_size = 100 # TODO Make this configurable
-        log("Starting clustering trial #1 with {} contributors.".format(trial_size))
+        trial_num = 1
+        trial_size = 20 # TODO Make this configurable
+        log("Trial #{} : Starting clustering with {} contributors.".format(trial_num, trial_size))
 
         # Sample (with no replacement, as it slows things down) contributors for the trial.
-        trial = random.sample(contributor_IDs, trial_size)
+        trial_contributorIDs = random.sample(contributor_IDs, trial_size)
+        trial_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        trial_avg_contributions = {}
 
-        for contributor in trial:
-            tmp = db.get_contributor_weekly_averages(contributor)
-            print(tmp)
+        log("Trial #{} : Calculating contribution averages.".format(trial_num))
+        for c_ID in trial_contributorIDs:
+            trial_avg_contributions[c_ID] = db.get_contributor_weekly_averages(c_ID)
 
-        log("Trial #1 is done.")
+        log("Trial #{} : Building initial proximity matrix.".format(trial_num))
+        proximity = {}
+        for c1_ID in trial_contributorIDs:
+            proximity[c1_ID] = {}
+            for c2_ID in trial_contributorIDs:
+                if c1_ID == c2_ID:
+                    proximity[c1_ID][c2_ID] = 0
+                    continue
+
+                proximity[c1_ID][c2_ID] = trial_avg_contributions[c1_ID].eucld_dist(
+                    trial_avg_contributions[c2_ID],
+                    weights=trial_weights)
+
+        log("Trial #{} : Done.".format(trial_num))
         log("Hierarchical clustering is done.")
 
         db.close()

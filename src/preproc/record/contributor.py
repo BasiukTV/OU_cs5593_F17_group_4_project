@@ -53,6 +53,10 @@ class Contributor(Record):
             self.reserve1,
             self.reserve2)
 
+    def __repr__(self):
+        """Print override for containers."""
+        return self.__str__()
+
     def eucld_dist(self, other, weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]):
         """Returns weighted Euclidian distance between this and other Contributor record."""
         return math.sqrt(
