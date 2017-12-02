@@ -9,7 +9,7 @@ sys.path.insert(0, app_src_dir)
 from modeling.modeling import Modeling
 from modeling.clustering.cluster_model import ClusterModel
 
-from utils.logging import log
+from utils.logging import log, progress
 
 class HierarchicalModel(ClusterModel):
     def __init__(self):
@@ -56,7 +56,7 @@ class HierarchicalModeling(Modeling):
         log("Retrieved {} unique contributor IDs.".format(con_num))
 
         trial_num = 1
-        trial_size = 20 # TODO Make this configurable
+        trial_size = 100 # TODO Make this configurable
         log("Trial #{} : Starting clustering with {} contributors.".format(trial_num, trial_size))
 
         # Sample (with no replacement, as it slows things down) contributors for the trial.
@@ -65,8 +65,12 @@ class HierarchicalModeling(Modeling):
         trial_avg_contributions = {}
 
         log("Trial #{} : Calculating contribution averages.".format(trial_num))
-        for c_ID in trial_contributorIDs:
+        for i in range(trial_size):
+            c_ID = trial_contributorIDs[i]
             trial_avg_contributions[c_ID] = db.get_contributor_weekly_averages(c_ID)
+
+            progress(i, trial_size)
+        progress(trial_size, trial_size, last=True)
 
         log("Trial #{} : Building initial proximity matrix.".format(trial_num))
         proximity = {}
