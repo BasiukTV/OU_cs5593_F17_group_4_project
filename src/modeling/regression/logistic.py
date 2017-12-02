@@ -36,6 +36,7 @@ class LogisticModeling(Modeling):
         # TODO Implement this
         return LogisticModel()
 import numpy as np
+from scipy.sparse import csr_matrix
 import math
 import sqlite3
 
@@ -112,10 +113,14 @@ def probability(observations, weight):
     return P
 
 def generateB(P):
+    import gc
+    from scipy.sparse import diags
+    gc.collect()
     num_observations = np.shape(P)[0]
-    B = np.zeros((num_observations, num_observations))
+    B_diag = np.zeros(num_observations)
     for i in range(0, num_observations):
-        B[i, i] = P[i] * (1 - P[i])
+        B_diag[i] = P[i] * (1 - P[i])
+    B = diags(B_diag)
 
     return B
 
@@ -137,14 +142,14 @@ def logistic_regression(x, y):
         P = probability(design_matrix, weight)
         B = generateB(P)
         likelihood_gradient = np.transpose(design_matrix).dot(P - y)
-        likelihood_hessian = np.transpose(design_matrix).dot(B).dot(design_matrix)
-        print(likelihood_hessian)
+        likelihood_hessian = np.transpose(design_matrix).dot(B.dot(design_matrix))
         hessian_inv_approx = np.linalg.lstsq(likelihood_hessian, np.eye(num_variables + 1, num_variables + 1))[0]
         change = - hessian_inv_approx.dot(likelihood_gradient)
         weight = weight + change
         diff = 0
         for val in change:
             diff += val ** 2
+        print(weight)
         # TODO calculatell
 
     return weight
@@ -170,8 +175,8 @@ def look_into_future(con, id, current_time):
         FROM repository
         WHERE repositoryID = ?
           AND julianday(timestamp) BETWEEN julianday(?) + 152 AND julianday(?) + 182
-    """, (id,)).fetchone()[0]
-    return pushes > 0
+    """, (id, current_time, current_time)).fetchone()[0]
+    return 1 if pushes > 0 else 0
 
 # gathers all independen variables
 def gather_repo_data(con, id, current_time):
@@ -244,14 +249,18 @@ if  __name__ == "__main__":
     con = sqlite3.connect(args.dataset)
     int_count = 0
     total_count = 0
+    training_data = []
+    training_output = []
     for (id,) in con.execute("select id from repo where finished=1"):
-        total_count += 1
-        result = gather_repo_data(con, id, "2017-09-27")
-        interesting = False
-        for item in result:
-            if item != 0:
-                interesting = True
-                int_count += 1
-        if interesting:
-            print("{} ({}): {}".format(id, round(int_count/total_count * 100, 2), result))
+        result = gather_repo_data(con, id, "2017-03-27")
+        active = look_into_future(con, id, "2017-03-27")
+        training_data += [ result ]
+        training_output += [ active ]
+
+    x = np.array(training_data)
+    y = np.array(training_output)
+    print("Done building parameters, starting modeling")
+    model = logistic_regression(x, y)
+    print(model)
+    # print(predict(x, model))
 
