@@ -35,6 +35,198 @@ class LogisticModeling(Modeling):
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
         return LogisticModel()
+import numpy as np
+import math
+import sqlite3
+
+THRESH = 0.0000001
+
+# calculates the logistic function
+def sigmoid(t):
+    return 1 / (1 + math.exp(-t))
+
+def linear_combination(x, a):
+    t = a[0] # intercept
+    for i in range(len(x)):
+        t += x[i] * a[i + 1]
+    return t
+
+def predict(x, weights):
+    # t is a linear combination of the expanatory variables:
+    # t = w0 + x1 * w1 + x2 * w2 + ... + xn * wn
+    # for i in range(x.shape[0]):
+    for i in range(1,6):
+        t = (linear_combination([i, 1], weights)) # TODO cache
+        res = sigmoid(t)
+        print("hours = {}, probability = {}".format(i, round(res * 100, 2)))
+    # process t through the logistic function to create a probability between 0 and 1 
+    # return sigmoid(t)
+
+# likelihood of the given observations occurring with given probabilities (binomial model, assumes independent)
+# this is the function that we (indirectly, through the log) want to maximize
+def likelihood(observations, probabilities):
+    l = 1
+    for (i, yi) in enumerate(observations):
+        if yi == 0:
+            l *= (1 - probabilities[i])
+        elif yi == 1:
+            l *= probabilities[i]
+        else:
+            raise("Observations have to be binary")
+    return l
+
+# odds = p / (1-p) (occuring/not_occuring)
+# odds of y = 1 given x (and the weights)
+# this equals e^logit(...)
+# this is *not* a probability, but ranges from 0 to +infty
+def odds(x, weights):
+    math.exp(linear_combination(x, weights))
+
+# inverse of logistic function
+def logit(t):
+    return math.log(t / (1 - t))
+
+# test the inverting (should return 3, with a bit of error)
+# print(logit(sigmoid(3)))
+
+# test on study example using wikipedias weights
+# for hours in range(1,6):
+#     print(round(predict([hours], [-4.0777, 1.5046]), 2))
+
+# x is input data, y in {0, 1} is data to predict, P is probability vector
+def log_likelihood_gradient(x, y, P):
+    a = y * x - P * x
+    return 42
+
+def probability(observations, weight):
+    s = observations.shape
+    num_observations = s[0]
+    num_variables = s[1]
+    P = np.zeros(num_observations)
+    exponent = np.zeros(num_observations)
+
+    for i in range(0, num_observations):
+        for j in range(0, num_variables):
+            exponent[i] += observations[i, j] * weight[j]
+        P[i] = math.exp(exponent[i]) / (1 + math.exp(exponent[i]))
+    return P
+
+def generateB(P):
+    num_observations = np.shape(P)[0]
+    B = np.zeros((num_observations, num_observations))
+    for i in range(0, num_observations):
+        B[i, i] = P[i] * (1 - P[i])
+
+    return B
+
+def logistic_regression(x, y):
+    s = np.shape(x)
+    num_observations = s[0]
+    num_variables = s[1]
+    assert(np.shape(y) == (num_observations,))
+
+    weight = np.zeros(num_variables + 1)
+    bias = np.ones((num_observations, 1))
+
+    design_matrix = np.append(bias, x, 1)
+    
+    change = np.ones(num_variables + 1)
+
+    diff = 1
+    while diff > THRESH:
+        P = probability(design_matrix, weight)
+        B = generateB(P)
+        likelihood_gradient = np.transpose(design_matrix).dot(P - y)
+        likelihood_hessian = np.transpose(design_matrix).dot(B).dot(design_matrix)
+        print(likelihood_hessian)
+        hessian_inv_approx = np.linalg.lstsq(likelihood_hessian, np.eye(num_variables + 1, num_variables + 1))[0]
+        change = - hessian_inv_approx.dot(likelihood_gradient)
+        weight = weight + change
+        diff = 0
+        for val in change:
+            diff += val ** 2
+        # TODO calculatell
+
+    return weight
+
+# x = np.transpose(np.array(range(1,11), ndmin=2))
+# y = np.array([0, 0, 0, 0, 1, 0, 1, 0, 1, 1])
+# model = logistic_regression(x, y)
+# print(predict(x, model))
+
+# x = np.array(
+#         [[0.5, 1], [0.75, 1], [1.0, 1], [1.25, 1], [1.5, 1], [1.75, 1], [2.0, 1], [2.25, 1], [2.5, 1], [2.75, 1], [3.0, 1], [3.25, 1], [4.0, 1], [4.25, 1], [4.5, 1], [4.75, 1], [5.0, 1], [5.5, 1]])
+# y = np.array(
+#     [0,   0,    0,   0,    0,   1,    0,   1,    0,   1,    0,   1,    1,   1,    1,   1,    1,   1])
+# model = logistic_regression(x, y)
+# print(model)
+# print(predict(x, model))
+
+# determines if a repo will be active in half a year (dependent variable)
+def look_into_future(con, id, current_time):
+    # pushes over 1 month in half a year
+    pushes = con.execute("""
+        SELECT sum(code_push_count)
+        FROM repository
+        WHERE repositoryID = ?
+          AND julianday(timestamp) BETWEEN julianday(?) + 152 AND julianday(?) + 182
+    """, (id,)).fetchone()[0]
+    return pushes > 0
+
+# gathers all independen variables
+def gather_repo_data(con, id, current_time):
+    # compute the average values
+    averages = con.execute("""
+        SELECT
+            avg(star_count),
+            avg(total_contributor_count),
+            avg(contributor_type1_count),
+            avg(contributor_type2_count),
+            avg(contributor_type3_count),
+            avg(contributor_type4_count),
+            avg(contributor_type5_count),
+            avg(code_push_count),
+            avg(pull_request_created_count),
+            avg(pull_request_reviewed_count),
+            avg(pull_request_resolved_count),
+            avg(fork_count),
+            avg(release_count),
+            avg(issue_created_count),
+            avg(issue_commented_count),
+            avg(issue_resolved_count),
+            avg(org_activity_count)
+        FROM repository
+        WHERE repositoryID = ?
+          AND timestamp <= ?
+        """, (id, current_time))
+    # compute the average change in all the attributes for this repository over the last two month (62 days)
+    deltas = con.execute("""
+        SELECT
+            avg(new.star_count - old.star_count),
+            avg(new.total_contributor_count - old.total_contributor_count),
+            avg(new.contributor_type1_count - old.contributor_type1_count),
+            avg(new.contributor_type2_count - old.contributor_type2_count),
+            avg(new.contributor_type3_count - old.contributor_type3_count),
+            avg(new.contributor_type4_count - old.contributor_type4_count),
+            avg(new.contributor_type5_count - old.contributor_type5_count),
+            avg(new.code_push_count - old.code_push_count),
+            avg(new.pull_request_created_count - old.pull_request_created_count),
+            avg(new.pull_request_reviewed_count - old.pull_request_reviewed_count),
+            avg(new.pull_request_resolved_count - old.pull_request_resolved_count),
+            avg(new.fork_count - old.fork_count),
+            avg(new.release_count - old.release_count),
+            avg(new.issue_created_count - old.issue_created_count),
+            avg(new.issue_commented_count - old.issue_commented_count),
+            avg(new.issue_resolved_count - old.issue_resolved_count),
+            avg(new.org_activity_count - old.org_activity_count)
+        FROM repository new, repository old
+        WHERE new.repositoryID = ? and old.repositoryID = ?
+          AND julianday(new.timestamp) = julianday(old.timestamp) + 7
+          AND julianday(old.timestamp) >= julianday(?) - 62
+            """, (id, id, current_time))
+    result = averages.fetchone() + deltas.fetchone()
+    return tuple(xi for xi in result if xi is not None) # remove Nones (if contributors are not known yet)
+
 
 if  __name__ == "__main__":
     import argparse
@@ -45,7 +237,21 @@ if  __name__ == "__main__":
     args = parser.parse_args()
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
-    modeling = LogisticModeling(args.dataset)
-    model = modeling.run_modeling("not_actual_cross_validation_params")
-    model.serialize_to_file("not_an_anctual_path_to_file")
-    pass
+    # modeling = LogisticModeling(args.dataset)
+    # model = modeling.run_modeling("not_actual_cross_validation_params")
+    # model.serialize_to_file("not_an_anctual_path_to_file")
+
+    con = sqlite3.connect(args.dataset)
+    int_count = 0
+    total_count = 0
+    for (id,) in con.execute("select id from repo where finished=1"):
+        total_count += 1
+        result = gather_repo_data(con, id, "2017-09-27")
+        interesting = False
+        for item in result:
+            if item != 0:
+                interesting = True
+                int_count += 1
+        if interesting:
+            print("{} ({}): {}".format(id, round(int_count/total_count * 100, 2), result))
+
