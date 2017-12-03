@@ -1,5 +1,10 @@
 import os, sys
 import math
+import numpy as np
+import math
+import sqlite3
+from scipy.sparse import csr_matrix
+import sympy
 
 # notes
 # https://statisticalhorizons.com/logistic-regression-for-rare-events
@@ -17,7 +22,6 @@ from modeling.regression.regression_model import RegressionModel
 
 class LogisticModel(RegressionModel):
     def __init__(self):
-        # TODO This simply calls super constructor and might need (or not) updates
         super().__init__()
 
     def regression_on_repository(self, repository_record):
@@ -33,7 +37,6 @@ class LogisticModel(RegressionModel):
         pass
 
 class LogisticModeling(Modeling):
-
     def __init__(self, preproc_dataset_path):
         super().__init__(preproc_dataset_path)
         # TODO This simply calls super constructor and might need (or not) updates
@@ -42,16 +45,11 @@ class LogisticModeling(Modeling):
         # TODO Implement this
         return LogisticModel()
 
-import numpy as np
-from scipy.sparse import csr_matrix
-import math
-import sqlite3
-
 THRESH = 0.0000001
 
 # calculates the logistic function
 def sigmoid(t):
-    return 1 / (1 + math.exp(-t))
+    return 1 / (1 + sympy.exp(-t))
 
 def linear_combination(x, a):
     t = a[0] # intercept
@@ -83,7 +81,7 @@ def likelihood(observations, probabilities):
 # this equals e^logit(...)
 # this is *not* a probability, but ranges from 0 to +infty
 def odds(x, weights):
-    math.exp(linear_combination(x, weights))
+    sympy.exp(linear_combination(x, weights))
 
 # inverse of logistic function
 def logit(t):
@@ -111,7 +109,8 @@ def probability(observations, weight):
     for i in range(0, num_observations):
         for j in range(0, num_variables):
             exponent[i] += observations[i, j] * weight[j]
-        P[i] = math.exp(exponent[i]) / (1 + math.exp(exponent[i]))
+        a = sympy.exp(exponent[i])
+        P[i] = a / (1 + a)
     return P
 
 def generateB(P):
@@ -182,7 +181,7 @@ def judge_active(con, current_time):
         SELECT
             repositoryID AS id,
             sum(code_push_count) + sum(pull_request_resolved_count) + sum(issue_resolved_count) + sum(org_activity_count) AS activities
-        FROM repository
+        FROM selection
         WHERE julianday(timestamp) BETWEEN julianday(?) - 91 AND julianday(?)
         GROUP BY repositoryID
     """.format(active_name), (current_time, current_time))
@@ -194,7 +193,7 @@ def gather_repo_data(con, current_time):
     # compute the average values
     avg_name = 'repo_averages_{}'.format(current_time)
     delta_name = 'repo_deltas_{}'.format(current_time)
-    averages = con.execute("""
+    con.execute("""
         CREATE TABLE IF NOT EXISTS CACHE.\"{}\" AS
         SELECT
             repositoryID as id,
@@ -215,12 +214,12 @@ def gather_repo_data(con, current_time):
             avg(issue_commented_count) as avg_issue_commented,
             avg(issue_resolved_count) as avg_issue_resolved,
             avg(org_activity_count) as avg_org
-        FROM repository
+        FROM selection
         WHERE timestamp <= ?
         GROUP BY repositoryID
         """.format(avg_name), (current_time,))
     # compute the average change in all the attributes for this repository over the last two month (62 days)
-    deltas = con.execute("""
+    con.execute("""
         CREATE TABLE IF NOT EXISTS CACHE.\"{}\" AS
         SELECT
             new.repositoryID as id,
@@ -241,12 +240,12 @@ def gather_repo_data(con, current_time):
             avg(new.issue_commented_count - old.issue_commented_count) as delta_issue_commented,
             avg(new.issue_resolved_count - old.issue_resolved_count) as delta_issue_resolved,
             avg(new.org_activity_count - old.org_activity_count) as delta_org
-        FROM repository new JOIN repository old ON old.repositoryID = new.repositoryID
+        FROM selection new JOIN selection old ON old.repositoryID = new.repositoryID
         WHERE julianday(new.timestamp) = julianday(old.timestamp) + 7
-          AND julianday(old.timestamp) >= julianday(?) - 62
+          AND julianday(old.timestamp) BETWEEN julianday(?) - 62 AND julianday(?)
         GROUP BY new.repositoryID
-            """.format(delta_name), (current_time,))
-    result = con.execute("""
+            """.format(delta_name), (current_time, current_time))
+    averages = con.execute("""
         SELECT
             avg_star,
             avg_push,
@@ -258,7 +257,12 @@ def gather_repo_data(con, current_time):
             avg_issue_created,
             avg_issue_commented,
             avg_issue_resolved,
-            avg_org,
+            avg_org
+        FROM \"{}\"
+        ORDER BY id
+    """.format(avg_name)).fetchall()
+    deltas = con.execute("""
+        SELECT
             delta_star,
             delta_push,
             delta_pr_created,
@@ -270,10 +274,10 @@ def gather_repo_data(con, current_time):
             delta_issue_commented,
             delta_issue_resolved,
             delta_org
-        FROM \"{}\" avg JOIN \"{}\" delta ON avg.id = delta.id
-        ORDER BY avg.id
-    """.format(avg_name, delta_name)).fetchall()
-    return result
+        FROM \"{}\"
+        ORDER BY id
+    """.format(delta_name)).fetchall()
+    return np.append(averages, deltas, 1)
 
 
 if  __name__ == "__main__":
@@ -298,8 +302,14 @@ if  __name__ == "__main__":
     total_count = 0
 
 
+    con.execute("""
+        CREATE TEMP VIEW selection AS
+        SELECT repository.*
+        FROM repository JOIN repo on repositoryID = id
+        WHERE julianday(creation_date) <= julianday('{}') - 62
+    """.format('2017-03-27'))
     data = np.array(gather_repo_data(con, "2017-03-27"))
-    activities = np.array(judge_active(con, "2017-03-27"))
+    activities = np.array(judge_active(con, "2017-09-27"))
 
     # randomize both arrays while keeping the indices together
     assert(len(data) == len(activities))
@@ -310,14 +320,14 @@ if  __name__ == "__main__":
     training_cutoff = math.ceil(len(data) * 0.9) # 90% train, rest test
     x = data[:training_cutoff]
     y = activities[:training_cutoff]
-    print(y)
     print("Done building parameters, starting modeling")
-    import cProfile
-    model = cProfile.run('logistic_regression(x, y)')
+    # import cProfile
+    # model = cProfile.run('logistic_regression(x, y)')
+    model = logistic_regression(x, y)
     print(model)
     print("Done modeling, starting test")
     x = np.array(data[training_cutoff:])
-    y = np.array(activity[training_cutoff:])
+    y = np.array(activities[training_cutoff:])
     true_positive = 0
     true_negative = 0
     false_positive = 0
@@ -325,12 +335,12 @@ if  __name__ == "__main__":
     for (xi, yi) in zip(x, y):
         prediction = predict(xi, model)
         if yi == 1:
-            if xi == 1:
+            if prediction == 1:
                 true_positive += 1
             else:
                 false_negative += 1
         else:
-            if xi == 1:
+            if prediction == 1:
                 false_positive += 1
             else:
                 true_negative += 1
@@ -338,6 +348,6 @@ if  __name__ == "__main__":
     print("False positive: {}".format(false_positive))
     print("True negative: {}".format(true_negative))
     print("False negative: {}".format(false_negative))
-    print("Total accuracy: {}%".format(round((true_positive + true_negative) / (true_positive + true_negative + false_positive + false_negative) * 100, 2)))
-    print("Event accuracy: {}%".format(round(true_positive / (true_positive + false_negative) * 100, 2)))
-    print("Non-Event accuracy: {}%".format(round(true_negative / (true_negative + false_positive) * 100, 2)))
+    print("Total accuracy: {}%".format(0 if (true_positive + true_negative == 0) else round((true_positive + true_negative) / (true_positive + true_negative + false_positive + false_negative) * 100, 2)))
+    print("Event accuracy: {}%".format(0 if (true_positive == 0) else round(true_positive / (true_positive + false_negative) * 100, 2)))
+    print("Non-Event accuracy: {}%".format(0 if (true_negative == 0) else round(true_negative / (true_negative + false_positive) * 100, 2)))
