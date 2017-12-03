@@ -85,7 +85,7 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
             # Create an index on contributorID and timestamp
             cursor.execute("CREATE INDEX ContibIdx ON contributor(contributorID, timestamp)")
 
-            self.db_connection.commit();
+            self.db_connection.commit()
 
     def close(self):
         """Closes database."""

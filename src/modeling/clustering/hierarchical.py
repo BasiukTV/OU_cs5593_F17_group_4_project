@@ -60,7 +60,7 @@ class HierarchicalModeling(Modeling):
     def __init__(self, preproc_dataset_path):
         super().__init__(preproc_dataset_path)
 
-    def run_modeling(self, cross_validation_params):
+    def run_modeling(self, cross_validation_params, output_clustering_db_path):
         # TODO Cross Validation Parameters are strictly speaking only aply for supervised learning. We need to rename this.
 
         import random
@@ -215,6 +215,12 @@ class HierarchicalModeling(Modeling):
         log("Trial #{} : Done.".format(trial_num))
         log("Hierarchical clustering of sample is done.")
 
+        if output_clustering_db_path:
+            log("Will 'model' whole contributor dataset clustering and record it to '{}'".format(output_clustering_db_path))
+            from database.sqlite.clustering_db import SQLiteClusteringDatabase
+            out_db = SQLiteClusteringDatabase(output_clustering_db_path)
+            out_db.close()
+
         db.close()
 
         return best_model
@@ -227,6 +233,7 @@ if  __name__ == "__main__":
     parser = argparse.ArgumentParser("Script for creating a kmeans hierarchical model of GitHub contributors.")
     parser.add_argument("-d", "--dataset", required=True, help="Path to preprocessed dataset.")
     parser.add_argument("-ts", "--trial-size", type=int, required=True, help="Number of contributors to include in a trial. Hierarchical clustering uses O(n**2) of memory. This number cannot be very large.")
+    parser.add_argument("-cdbp", "--clustering-db-path", help="Path to the output clustering db.")
     args = parser.parse_args()
 
     # We use simple named tuple so we don't have to define a class which will not be used anywhere else
@@ -234,5 +241,5 @@ if  __name__ == "__main__":
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
     modeling = HierarchicalModeling(args.dataset)
-    best_model = modeling.run_modeling(RuntimeParameters(args.trial_size))
+    best_model = modeling.run_modeling(RuntimeParameters(args.trial_size), args.clustering_db_path)
     print("Best model is:\n{}".format(best_model))
