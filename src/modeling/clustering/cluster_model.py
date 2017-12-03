@@ -8,6 +8,6 @@ class ClusterModel(SerializableModel):
         super().__init__()
 
     @abstractmethod
-    def cluster_contributor(sefl, contibutor_record):
+    def cluster_contributor(self, avg_contibutor_record):
         """Returns cluster identifier (integer from 1 to 5) given contibutor_record belongs to according to the model."""
         pass
