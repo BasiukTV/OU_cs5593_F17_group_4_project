@@ -17,15 +17,24 @@ class HierarchicalModel(ClusterModel):
         Strictly speaking clustering doesn't result in a model, it results in an assignment of a cluster ID
         to every contributor (a.k.a "clustering"). However, as hierarchical clustering uses O(n**2) memory
         and GitHub has over 30M contributors classic approach will not work. So, instead, we cluster
-        sufficiently large representative sample of contributors and record a cluster dendrogram cut.
-        To cluster contributors outside the sample (or outside original dataset entirely) ...
-        TODO Finish
+        sufficiently large representative sample of contributors and record its cluster dendrogram cut.
+        To cluster contributors outside the sample (or outside the dataset entirely) we take the cut
+        and introduce new contributor as a new cluster. Because we use sum group distances, that new cluster
+        will be merged to one of the old clusters, because it's so small and will introduce smallest error growth.
+        We then repeat this process for all 30M contributors. Problem with this approach is that adding majority
+        of data to the clustering after the fact makes our initial dendrogram "untrue", and we basically making
+        a claim (hopufuly justified) that if new contributor was a member of original small sample it would be
+        assigned to the same cluster, and furthermore, remaining clustering will not change for other contributors.
+        We accept this drawback, so we can actually cluster our whole dataset.
     """
 
-    def __init__(self):
+    def __init__(self, cluster_sizes, clusters_avg_contributor, sum_cluster_error):
         super().__init__()
+        self.cluster_sizes = cluster_sizes
+        self.clusters_avg_contributor = clusters_avg_contributor
+        self.sum_cluster_error = sum_cluster_error
 
-    def cluster_contributor(self, contributor_record):
+    def cluster_contributor(self, avg_contributor_record):
         # TODO Implement this
         pass
 
@@ -36,6 +45,15 @@ class HierarchicalModel(ClusterModel):
     def deserialize_from_file(self, path_to_model):
         # TODO Implement this
         pass
+
+    def __str__(self):
+        """String representation override."""
+        result = "This Hierarchical Model is a dendrogram with {} clusters:".format(len(self.cluster_sizes))
+        for i in range(len(self.cluster_sizes)):
+            result += "\nCluster #{}: Size - {}, Avg. {}".format(
+                i + 1, self.cluster_sizes[i], self.clusters_avg_contributor[i])
+        result += "\nSum Error of Clusters: {}".format(self.sum_cluster_error)
+        return result
 
 class HierarchicalModeling(Modeling):
 
@@ -61,7 +79,7 @@ class HierarchicalModeling(Modeling):
         """
         db = SQLitePreprocessingDatabase(endpoint = self.preproc_dataset_path, existing = True)
 
-        log("Retrieving the list of available contibutor IDs from the dataset.")
+        log("Retrieving the list of all available contibutor IDs from the dataset.")
         contributor_IDs = db.get_contributor_IDs()
         con_num = len(contributor_IDs) # Number of available contributors
         log("Retrieved {} unique contributor IDs.".format(con_num))
@@ -103,6 +121,7 @@ class HierarchicalModeling(Modeling):
         progress(p, out_of)
 
         avg_contrib_copy = copy(trial_avg_contributions)
+        best_model = None
 
         while len(proximity_matrix) > 1:
             # Arbitrarily pick one distance between clusters as a min distance
@@ -163,17 +182,42 @@ class HierarchicalModeling(Modeling):
                         self_cluster_size=len(proximity_matrix[min_dist_from_clusterID][0]),
                         other_cluster_size=len(proximity_matrix[cID1][0]))
 
+            # As we going through joining last 5 cluster, let's pick one of the clusterings to be used for "modeling"
+            if len(proximity_matrix) <= 5:
+                cluster_sizes = []
+                clusters_avg_contributor = []
+                sum_cluster_error = 0
+
+                # Calculate cluster sizes, average members and dum of errors
+                for cID in proximity_matrix:
+                    cluster_sizes.append(len(proximity_matrix[cID][0]))
+                    clusters_avg_contributor.append(avg_contrib_copy[cID])
+
+                    for contrib in proximity_matrix[cID][0]:
+                        sum_cluster_error += avg_contrib_copy[cID].eucld_dist(trial_avg_contributions[contrib])
+
+                candidate_model = HierarchicalModel(cluster_sizes, clusters_avg_contributor, sum_cluster_error)
+                if len(proximity_matrix) == 5:
+                    progress(1, 1, last=True)
+                    log("Now doing merging of final 5 clusters.")
+                    best_model = candidate_model
+                    continue
+
+                if candidate_model.sum_cluster_error / best_model.sum_cluster_error > 1.1:
+                    # If last joing increased sum error of clustering by more than 10%, it's probably a good place to stop.
+                    break
+
+                continue
+
             p += len(proximity_matrix) + 1
             progress(p, out_of)
 
-        progress(1, 1, last=True)
         log("Trial #{} : Done.".format(trial_num))
-        log("Hierarchical clustering is done.")
+        log("Hierarchical clustering of sample is done.")
 
         db.close()
 
-        # TODO Finish this
-        return HierarchicalModel()
+        return best_model
 
 if  __name__ == "__main__":
     import argparse
@@ -190,5 +234,5 @@ if  __name__ == "__main__":
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
     modeling = HierarchicalModeling(args.dataset)
-    model = modeling.run_modeling(RuntimeParameters(args.trial_size))
-    model.serialize_to_file("not_an_anctual_path_to_file")
+    best_model = modeling.run_modeling(RuntimeParameters(args.trial_size))
+    print("Best model is:\n{}".format(best_model))
