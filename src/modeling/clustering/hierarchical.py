@@ -14,7 +14,6 @@ from utils.logging import log, progress
 
 class HierarchicalModel(ClusterModel):
     def __init__(self):
-        # TODO This simply calls super constructor and might need (or not) updates
         super().__init__()
 
     def cluster_contributor(self, contributor_record):
@@ -33,9 +32,10 @@ class HierarchicalModeling(Modeling):
 
     def __init__(self, preproc_dataset_path):
         super().__init__(preproc_dataset_path)
-        # TODO This simply calls super constructor and might need (or not) updates
 
     def run_modeling(self, cross_validation_params):
+        # TODO Cross Validation Parameters are strictly speaking only aply for supervised learning. We need to rename this.
+
         import random
         from database.sqlite.preproc_db_sqlite import SQLitePreprocessingDatabase
 
@@ -56,8 +56,8 @@ class HierarchicalModeling(Modeling):
         con_num = len(contributor_IDs) # Number of available contributors
         log("Retrieved {} unique contributor IDs.".format(con_num))
 
-        trial_num = 1
-        trial_size = 100 # TODO Make this configurable
+        trial_num = 1 # TODO Configure this, run multiple trials
+        trial_size = cross_validation_params.trial_size
         log("Trial #{} : Starting clustering with {} contributors.".format(trial_num, trial_size))
 
         # Sample (with no replacement, as it slows things down) contributors for the trial.
@@ -164,13 +164,18 @@ class HierarchicalModeling(Modeling):
 
 if  __name__ == "__main__":
     import argparse
+    from collections import namedtuple
 
     # Configuring CLI arguments parser and parsing the arguments
     parser = argparse.ArgumentParser("Script for creating a kmeans hierarchical model of GitHub contributors.")
-    parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
+    parser.add_argument("-d", "--dataset", required=True, help="Path to preprocessed dataset.")
+    parser.add_argument("-ts", "--trial-size", type=int, required=True, help="Number of contributors to include in a trial. Hierarchical clustering uses O(n**2) of memory. This number cannot be very large.")
     args = parser.parse_args()
+
+    # We use simple named tuple so we don't have to define a class which will not be used anywhere else
+    RuntimeParameters = namedtuple('RuntimeParameters', ['trial_size'])
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
     modeling = HierarchicalModeling(args.dataset)
-    model = modeling.run_modeling("not_actual_cross_validation_params")
+    model = modeling.run_modeling(RuntimeParameters(args.trial_size))
     model.serialize_to_file("not_an_anctual_path_to_file")
