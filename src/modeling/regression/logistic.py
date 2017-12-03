@@ -46,6 +46,30 @@ class LogisticModeling(Modeling):
         return LogisticModel()
 
 THRESH = 0.0000001
+PARAM_NAMES = [
+    'avg_star',
+    'avg_push',
+    'avg_pr_created',
+    'avg_pr_reviewed',
+    'avg_pr_resolved',
+    'avg_fork',
+    'avg_release',
+    'avg_issue_created',
+    'avg_issue_commented',
+    'avg_issue_resolved',
+    'avg_org',
+    'delta_star',
+    'delta_push',
+    'delta_pr_created',
+    'delta_pr_reviewed',
+    # 'delta_pr_resolved',
+    # 'delta_fork',
+    # 'delta_release',
+    'delta_issue_created',
+    'delta_issue_commented',
+    'delta_issue_resolved',
+    'delta_org'
+]
 
 # calculates the logistic function
 def sigmoid(t):
@@ -143,7 +167,9 @@ def logistic_regression(x, y):
     change = np.ones(num_variables + 1)
 
     diff = 1
+    r = 0
     while diff > THRESH:
+        r += 1
         P = probability(design_matrix, weight)
         B = generateB(P)
         likelihood_gradient = transposed_design.dot(P - y)
@@ -154,7 +180,9 @@ def logistic_regression(x, y):
         diff = 0
         for val in change:
             diff += val ** 2
-        print(weight)
+        print("Round {}".format(r))
+        for (n, w) in zip(PARAM_NAMES, weight):
+            print("{:28}{}".format(n, round(w, 2)))
         # TODO calculatell
 
     return weight
@@ -267,9 +295,6 @@ def gather_repo_data(con, current_time):
             delta_push,
             delta_pr_created,
             delta_pr_reviewed,
-            delta_pr_resolved,
-            delta_fork,
-            delta_release,
             delta_issue_created,
             delta_issue_commented,
             delta_issue_resolved,
@@ -344,9 +369,9 @@ if  __name__ == "__main__":
                 false_positive += 1
             else:
                 true_negative += 1
-    print("True positive: {}".format(true_positive))
+    print("True positive:  {}".format(true_positive))
     print("False positive: {}".format(false_positive))
-    print("True negative: {}".format(true_negative))
+    print("True negative:  {}".format(true_negative))
     print("False negative: {}".format(false_negative))
     print("Total accuracy: {}%".format(0 if (true_positive + true_negative == 0) else round((true_positive + true_negative) / (true_positive + true_negative + false_positive + false_negative) * 100, 2)))
     print("Event accuracy: {}%".format(0 if (true_positive == 0) else round(true_positive / (true_positive + false_negative) * 100, 2)))
