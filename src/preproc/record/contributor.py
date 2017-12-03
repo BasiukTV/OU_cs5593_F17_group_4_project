@@ -57,9 +57,13 @@ class Contributor(Record):
         """Print override for containers."""
         return self.__str__()
 
-    def eucld_dist(self, other, weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]):
-        """Returns weighted Euclidian distance between this and other Contributor record."""
-        return math.sqrt(
+    def eucld_dist(self, other, weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], self_cluster_size=1, other_cluster_size=1):
+        """
+            Returns weighted Euclidian distance between this and other Contributor record.
+            If self_cluster_size and/or other_cluster_size are given, returns distance between cluster centorids
+            multiplied by size of self and other cluster.
+        """
+        return self_cluster_size * other_cluster_size * math.sqrt((
             weights[0] * (self.repos_started_count - other.repos_started_count) ** 2 +
             weights[1] * (self.repos_forked_count - other.repos_forked_count) ** 2 +
             weights[2] * (self.code_pushed_count - other.code_pushed_count) ** 2 +
@@ -70,6 +74,7 @@ class Contributor(Record):
             weights[7] * (self.issue_commented_count - other.issue_commented_count) ** 2 +
             weights[8] * (self.issue_other_activity_count - other.issue_other_activity_count) ** 2 +
             weights[9] * (self.owned_repos_starts_count - other.owned_repos_starts_count) ** 2)
+                / sum(weights))
 
 def calc_avg_contribution(contributors, resultID=0, resultTimestamp=0):
     """
