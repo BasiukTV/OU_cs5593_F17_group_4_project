@@ -77,7 +77,7 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
                     issue_resolved_count integer,
                     issue_commented_count integer,
                     issue_other_activity_count integer,
-                    owned_repos_starts_count integer,
+                    owned_repos_stars_count integer,
                     reserve1 integer,
                     reserve2 text
                 )""")
@@ -164,7 +164,7 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
                        issue_resolved_count,
                        issue_commented_count,
                        issue_other_activity_count,
-                       owned_repos_starts_count
+                       owned_repos_stars_count
                 FROM contributor
                 WHERE contributorID = {}""".format(contributorID)).fetchall()
 

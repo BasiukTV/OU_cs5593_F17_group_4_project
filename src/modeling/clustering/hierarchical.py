@@ -13,6 +13,15 @@ from preproc.record.contributor import calc_avg_contribution
 from utils.logging import log, progress
 
 class HierarchicalModel(ClusterModel):
+    """
+        Strictly speaking clustering doesn't result in a model, it results in an assignment of a cluster ID
+        to every contributor (a.k.a "clustering"). However, as hierarchical clustering uses O(n**2) memory
+        and GitHub has over 30M contributors classic approach will not work. So, instead, we cluster
+        sufficiently large representative sample of contributors and record a cluster dendrogram cut.
+        To cluster contributors outside the sample (or outside original dataset entirely) ...
+        TODO Finish
+    """
+
     def __init__(self):
         super().__init__()
 
@@ -37,6 +46,7 @@ class HierarchicalModeling(Modeling):
         # TODO Cross Validation Parameters are strictly speaking only aply for supervised learning. We need to rename this.
 
         import random
+        from copy import copy
         from database.sqlite.preproc_db_sqlite import SQLitePreprocessingDatabase
 
         log("Starting hierarchical clustering of the contributors.")
@@ -88,6 +98,12 @@ class HierarchicalModeling(Modeling):
                     weights=trial_weights)
 
         log("Trial #{} : Starting to merge clusters in.".format(trial_num))
+        p = 0 # Progress counter
+        out_of = (len(proximity_matrix) ** 2) / 2 # Progress untill finish
+        progress(p, out_of)
+
+        avg_contrib_copy = copy(trial_avg_contributions)
+
         while len(proximity_matrix) > 1:
             # Arbitrarily pick one distance between clusters as a min distance
 
@@ -120,7 +136,7 @@ class HierarchicalModeling(Modeling):
             new_cluster_contributor_records = []
             for cID in proximity_matrix[min_dist_from_clusterID][0]:
                 new_cluster_contributor_records.append(trial_avg_contributions[cID])
-            new_cluster_average_contribution = calc_avg_contribution(new_cluster_contributor_records)
+            avg_contrib_copy[min_dist_from_clusterID] = calc_avg_contribution(new_cluster_contributor_records)
 
             # Iterate through remaining rows of proximity matrix and update them
             for cID1 in proximity_matrix.keys():
@@ -131,29 +147,26 @@ class HierarchicalModeling(Modeling):
                 if min_dist_to_clusterID in proximity_matrix[cID1][1].keys():
                     del proximity_matrix[cID1][1][min_dist_to_clusterID]
 
-                # Prepare this cluster average contribution
-                # TODO This cluster membership didn't change, we don't need to recalculate its average contribution
-                cluster_contributor_records = []
-                for cID2 in proximity_matrix[cID1][0]:
-                    cluster_contributor_records.append(trial_avg_contributions[cID2])
-                cluster_average_contribution = calc_avg_contribution(cluster_contributor_records)
-
                 # If this cluster contains distance to new cluster update it
                 if cID1 in proximity_matrix[min_dist_from_clusterID][1].keys():
-                    proximity_matrix[min_dist_from_clusterID][1][cID1] = new_cluster_average_contribution.eucld_dist(
-                        other=cluster_average_contribution,
+                    proximity_matrix[min_dist_from_clusterID][1][cID1] = avg_contrib_copy[min_dist_from_clusterID].eucld_dist(
+                        other=avg_contrib_copy[cID1],
                         weights=trial_weights,
                         self_cluster_size=len(proximity_matrix[min_dist_from_clusterID][0]),
                         other_cluster_size=len(proximity_matrix[cID1][0]))
                     continue
 
                 # Otherwise new cluster contains distance to this distance, update it
-                proximity_matrix[cID1][1][min_dist_from_clusterID] = new_cluster_average_contribution.eucld_dist(
-                        other=cluster_average_contribution,
+                proximity_matrix[cID1][1][min_dist_from_clusterID] = avg_contrib_copy[min_dist_from_clusterID].eucld_dist(
+                        other=avg_contrib_copy[cID1],
                         weights=trial_weights,
                         self_cluster_size=len(proximity_matrix[min_dist_from_clusterID][0]),
                         other_cluster_size=len(proximity_matrix[cID1][0]))
 
+            p += len(proximity_matrix) + 1
+            progress(p, out_of)
+
+        progress(1, 1, last=True)
         log("Trial #{} : Done.".format(trial_num))
         log("Hierarchical clustering is done.")
 
