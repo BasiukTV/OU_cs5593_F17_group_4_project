@@ -41,6 +41,7 @@ class LogisticModeling(Modeling):
     def run_modeling(self, cross_validation_params):
         # TODO Implement this
         return LogisticModel()
+
 import numpy as np
 from scipy.sparse import csr_matrix
 import math
@@ -172,70 +173,107 @@ def logistic_regression(x, y):
 # print(model)
 # print(predict(x, model))
 
-# determines if a repo will be active in half a year (dependent variable)
-def look_into_future(con, id, current_time):
-    # pushes over 1 month in half a year
-    pushes = con.execute("""
-        SELECT sum(code_push_count) + sum(pull_request_resolved_count) + sum(issue_resolved_count) + sum(org_activity_count)
+# determines if a repo is active (dependent variable)
+def judge_active(con, current_time):
+    active_name = "repo_active_{}".format(current_time)
+    # acitivities over 3 month
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS CACHE.\"{}\" AS
+        SELECT
+            repositoryID AS id,
+            sum(code_push_count) + sum(pull_request_resolved_count) + sum(issue_resolved_count) + sum(org_activity_count) AS activities
         FROM repository
-        WHERE repositoryID = ?
-          AND julianday(timestamp) BETWEEN julianday(?) + 91 AND julianday(?) + 182
-    """, (id, current_time, current_time)).fetchone()[0]
-    return 1 if pushes > 0 else 0
+        WHERE julianday(timestamp) BETWEEN julianday(?) - 91 AND julianday(?)
+        GROUP BY repositoryID
+    """.format(active_name), (current_time, current_time))
+    activities = con.execute("SELECT activities FROM \"{}\" ORDER BY id".format(active_name)).fetchall()
+    return [ x for (x,) in activities ]
 
 # gathers all independen variables
-def gather_repo_data(con, id, current_time):
+def gather_repo_data(con, current_time):
     # compute the average values
+    avg_name = 'repo_averages_{}'.format(current_time)
+    delta_name = 'repo_deltas_{}'.format(current_time)
     averages = con.execute("""
+        CREATE TABLE IF NOT EXISTS CACHE.\"{}\" AS
         SELECT
-            avg(star_count),
-            avg(total_contributor_count),
-            avg(contributor_type1_count),
-            avg(contributor_type2_count),
-            avg(contributor_type3_count),
-            avg(contributor_type4_count),
-            avg(contributor_type5_count),
-            avg(code_push_count),
-            avg(pull_request_created_count),
-            avg(pull_request_reviewed_count),
-            avg(pull_request_resolved_count),
-            avg(fork_count),
-            avg(release_count),
-            avg(issue_created_count),
-            avg(issue_commented_count),
-            avg(issue_resolved_count),
-            avg(org_activity_count)
+            repositoryID as id,
+            avg(star_count) as avg_star,
+            avg(total_contributor_count) as avg_contrib,
+            avg(contributor_type1_count) as avg_contrib_1,
+            avg(contributor_type2_count) as avg_contrib_2,
+            avg(contributor_type3_count) as avg_contrib_3,
+            avg(contributor_type4_count) as avg_contrib_4,
+            avg(contributor_type5_count) as avg_contrib_5,
+            avg(code_push_count) as avg_push,
+            avg(pull_request_created_count) as avg_pr_created,
+            avg(pull_request_reviewed_count) as avg_pr_reviewed,
+            avg(pull_request_resolved_count) as avg_pr_resolved,
+            avg(fork_count) as avg_fork,
+            avg(release_count) as avg_release,
+            avg(issue_created_count) as avg_issue_created,
+            avg(issue_commented_count) as avg_issue_commented,
+            avg(issue_resolved_count) as avg_issue_resolved,
+            avg(org_activity_count) as avg_org
         FROM repository
-        WHERE repositoryID = ?
-          AND timestamp <= ?
-        """, (id, current_time))
+        WHERE timestamp <= ?
+        GROUP BY repositoryID
+        """.format(avg_name), (current_time,))
     # compute the average change in all the attributes for this repository over the last two month (62 days)
     deltas = con.execute("""
+        CREATE TABLE IF NOT EXISTS CACHE.\"{}\" AS
         SELECT
-            avg(new.star_count - old.star_count),
-            avg(new.total_contributor_count - old.total_contributor_count),
-            avg(new.contributor_type1_count - old.contributor_type1_count),
-            avg(new.contributor_type2_count - old.contributor_type2_count),
-            avg(new.contributor_type3_count - old.contributor_type3_count),
-            avg(new.contributor_type4_count - old.contributor_type4_count),
-            avg(new.contributor_type5_count - old.contributor_type5_count),
-            avg(new.code_push_count - old.code_push_count),
-            avg(new.pull_request_created_count - old.pull_request_created_count),
-            avg(new.pull_request_reviewed_count - old.pull_request_reviewed_count),
-            avg(new.pull_request_resolved_count - old.pull_request_resolved_count),
-            avg(new.fork_count - old.fork_count),
-            avg(new.release_count - old.release_count),
-            avg(new.issue_created_count - old.issue_created_count),
-            avg(new.issue_commented_count - old.issue_commented_count),
-            avg(new.issue_resolved_count - old.issue_resolved_count),
-            avg(new.org_activity_count - old.org_activity_count)
-        FROM repository new, repository old
-        WHERE new.repositoryID = ? and old.repositoryID = ?
-          AND julianday(new.timestamp) = julianday(old.timestamp) + 7
+            new.repositoryID as id,
+            avg(new.star_count - old.star_count) as delta_star,
+            avg(new.total_contributor_count - old.total_contributor_count) as delta_contrib,
+            avg(new.contributor_type1_count - old.contributor_type1_count) as delta_contrib_1,
+            avg(new.contributor_type2_count - old.contributor_type2_count) as delta_contrib_2,
+            avg(new.contributor_type3_count - old.contributor_type3_count) as delta_contrib_3,
+            avg(new.contributor_type4_count - old.contributor_type4_count) as delta_contrib_4,
+            avg(new.contributor_type5_count - old.contributor_type5_count) as delta_contrib_5,
+            avg(new.code_push_count - old.code_push_count) as delta_push,
+            avg(new.pull_request_created_count - old.pull_request_created_count) as delta_pr_created,
+            avg(new.pull_request_reviewed_count - old.pull_request_reviewed_count) as delta_pr_reviewed,
+            avg(new.pull_request_resolved_count - old.pull_request_resolved_count) as delta_pr_resolved,
+            avg(new.fork_count - old.fork_count) as delta_fork,
+            avg(new.release_count - old.release_count) as delta_release,
+            avg(new.issue_created_count - old.issue_created_count) as delta_issue_created,
+            avg(new.issue_commented_count - old.issue_commented_count) as delta_issue_commented,
+            avg(new.issue_resolved_count - old.issue_resolved_count) as delta_issue_resolved,
+            avg(new.org_activity_count - old.org_activity_count) as delta_org
+        FROM repository new JOIN repository old ON old.repositoryID = new.repositoryID
+        WHERE julianday(new.timestamp) = julianday(old.timestamp) + 7
           AND julianday(old.timestamp) >= julianday(?) - 62
-            """, (id, id, current_time))
-    result = averages.fetchone() + deltas.fetchone()
-    return tuple(xi for xi in result if xi is not None) # remove Nones (if contributors are not known yet)
+        GROUP BY new.repositoryID
+            """.format(delta_name), (current_time,))
+    result = con.execute("""
+        SELECT
+            avg_star,
+            avg_push,
+            avg_pr_created,
+            avg_pr_reviewed,
+            avg_pr_resolved,
+            avg_fork,
+            avg_release,
+            avg_issue_created,
+            avg_issue_commented,
+            avg_issue_resolved,
+            avg_org,
+            delta_star,
+            delta_push,
+            delta_pr_created,
+            delta_pr_reviewed,
+            delta_pr_resolved,
+            delta_fork,
+            delta_release,
+            delta_issue_created,
+            delta_issue_commented,
+            delta_issue_resolved,
+            delta_org
+        FROM \"{}\" avg JOIN \"{}\" delta ON avg.id = delta.id
+        ORDER BY avg.id
+    """.format(avg_name, delta_name)).fetchall()
+    return result
 
 
 if  __name__ == "__main__":
@@ -244,6 +282,7 @@ if  __name__ == "__main__":
     # Configuring CLI arguments parser and parsing the arguments
     parser = argparse.ArgumentParser("Script for creating a logistic regression model of GitHub repositories.")
     parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
+    parser.add_argument("-c", "--cache", help="Path to cache database.")
     args = parser.parse_args()
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
@@ -254,25 +293,24 @@ if  __name__ == "__main__":
     print("Starting parameter building")
 
     con = sqlite3.connect(args.dataset)
+    con.execute("ATTACH \"{}\" AS CACHE".format(args.cache))
     int_count = 0
     total_count = 0
-    data = []
-    activity = []
-    # I need 182 days to be able to look into the future and 62 days to compute the delta
-    for (id,) in con.execute("SELECT id FROM repo WHERE finished=1 AND julianday(creation_date) <= julianday('2017-03-27') - 244 ORDER BY RANDOM()"):
-        total_count += 1
-        active = look_into_future(con, id, "2017-03-27")
-        if active == 1:
-            int_count += 1
 
-        result = gather_repo_data(con, id, "2017-03-27")
-        data += [ result ]
-        activity += [ active ]
-    print("{} out of {} are events ({}%)".format(int_count, total_count, round(int_count/total_count * 100, 4)))
+
+    data = np.array(gather_repo_data(con, "2017-03-27"))
+    activities = np.array(judge_active(con, "2017-03-27"))
+
+    # randomize both arrays while keeping the indices together
+    assert(len(data) == len(activities))
+    p = np.random.permutation(len(data))
+    data = data[p]
+    activities = activities[p]
 
     training_cutoff = math.ceil(len(data) * 0.9) # 90% train, rest test
-    x = np.array(data[:training_cutoff])
-    y = np.array(activity[:training_cutoff])
+    x = data[:training_cutoff]
+    y = activities[:training_cutoff]
+    print(y)
     print("Done building parameters, starting modeling")
     import cProfile
     model = cProfile.run('logistic_regression(x, y)')
