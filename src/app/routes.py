@@ -53,7 +53,7 @@ def cluster():
         RuntimeParameters = namedtuple('RuntimeParameters', ['trial_size'])
 
         modeling = HierarchicalModeling(arg.dataset)
-        return modeling.run_modeling(RuntimeParameters(arg.trial_size), arg.weights, arg.clustering_db_path).__str__()
+        return modeling.run_modeling(RuntimeParameters(arg.trial_size), arg.weights, arg.clustering_db_path).__html__()
 
     if request.method == "GET":
         if form.validate() == False:

@@ -70,6 +70,15 @@ class HierarchicalModel(ClusterModel):
         result += "\nSum Error of Clusters: {}".format(self.sum_cluster_error)
         return result
 
+    def __html__(self):
+        """HTML representation of the model."""
+        result = "<div>This Hierarchical Model is a dendrogram with {} clusters:</div>".format(len(self.cluster_sizes))
+        for i in range(len(self.cluster_sizes)):
+            result += "<div>Cluster #{}: Size - {}, Avg. {}</div>".format(
+                i + 1, self.cluster_sizes[i], self.clusters_avg_contributor[i])
+        result += "<div>Sum Error of Clusters: {}</div>".format(self.sum_cluster_error)
+        return result
+
 class HierarchicalModeling(Modeling):
 
     def __init__(self, preproc_dataset_path):
