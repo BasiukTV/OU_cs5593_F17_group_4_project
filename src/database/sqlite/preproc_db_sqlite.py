@@ -4,6 +4,7 @@ from threading import Lock
 
 # This application modules imports
 from database.preproc_db import PreprocessingDatabase
+from preproc.record.contributor import Contributor, calc_avg_contribution
 
 class SQLitePreprocessingDatabase(PreprocessingDatabase):
     """SQLIte class for the database instance used for hosting preprocessed data."""
@@ -76,7 +77,7 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
                     issue_resolved_count integer,
                     issue_commented_count integer,
                     issue_other_activity_count integer,
-                    owned_repos_starts_count integer,
+                    owned_repos_stars_count integer,
                     reserve1 integer,
                     reserve2 text
                 )""")
@@ -84,7 +85,7 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
             # Create an index on contributorID and timestamp
             cursor.execute("CREATE INDEX ContibIdx ON contributor(contributorID, timestamp)")
 
-            self.db_connection.commit();
+            self.db_connection.commit()
 
     def close(self):
         """Closes database."""
@@ -137,6 +138,63 @@ class SQLitePreprocessingDatabase(PreprocessingDatabase):
                     contributor_record.reserve2))
             self.db_connection.commit()
         return
+
+    def get_contributor_IDs(self):
+        """Return list of contributors for whom there's data in the dataset."""
+        with self.lock:
+            return list(map(
+                lambda x: x[0],
+                self.db_connection.cursor().execute("SELECT DISTINCT contributorID FROM contributor").fetchall()))
+
+    def get_contributor_weekly_averages(self, contributorID):
+        """Returns Contributor record which holds average weekly contributions for given contributorID. """
+
+        # Get every available contributor record for given contributorID
+        dataset_contributor_rows = None
+        with self.lock:
+            dataset_contributor_rows = self.db_connection.cursor().execute("""
+                SELECT contributorID,
+                       timestamp,
+                       repos_started_count,
+                       repos_forked_count,
+                       code_pushed_count,
+                       pull_request_created_count,
+                       pull_request_reviewed_count,
+                       issue_created_count,
+                       issue_resolved_count,
+                       issue_commented_count,
+                       issue_other_activity_count,
+                       owned_repos_stars_count
+                FROM contributor
+                WHERE contributorID = {}""".format(contributorID)).fetchall()
+
+        # Convert database output into list of contributor records
+        contributors = []
+        for row in dataset_contributor_rows:
+            contributors.append(Contributor(
+                contributorID = row[0],
+                timestamp = row[1],
+                repos_started_count = row[2],
+                repos_forked_count = row[3],
+                code_pushed_count = row[4],
+                pull_request_created_count = row[5],
+                pull_request_reviewed_count = row[6],
+                issue_created_count = row[7],
+                issue_resolved_count = row[8],
+                issue_commented_count = row[9],
+                issue_other_activity_count = row[10],
+                owned_repos_starts_count = row[11]))
+
+        """
+            As there are contributor records for every week in the dataset (most filled with zeros)
+            we ignore fetched timestamps and just assume number of records is the number of weeks
+            contributor was actibe on GitHub.
+
+            TODO Actually process timestamps.
+        """
+        return calc_avg_contribution(contributors,
+            resultID=contributorID,
+            resultTimestamp=0)  # Timestamp is meaningless for weekly average record
 
     def merge_in_intermidiate_db(self, intermidiate_preprocessing_db):
         """Merges data from an intermidiate preprocessing database into this database."""
