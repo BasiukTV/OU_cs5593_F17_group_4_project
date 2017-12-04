@@ -47,10 +47,7 @@ def create_db_connection(db_file):
     return None
 
 def insert_user_cluster(conn, cluster, contributor_ids):
-    create_table(conn)
-
-    cur = conn.cursor()    
-    
+    cur = conn.cursor()        
     for cid in contributor_ids:
         cur.execute('''insert into contributor_cluster values (?, ?)''', (cid, cluster))        
 
@@ -86,6 +83,7 @@ class KMeansModeling(Modeling):
         clusters = do_kmeans(self.data_list, k, self.diff)          
         
         conn = create_db_connection(output_path)
+        create_table(conn)
 
         total_sse = 0.0 
         print('K = %s' %(len(clusters)))
