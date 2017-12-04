@@ -3,16 +3,50 @@ import math
 import numpy as np
 import math
 import sqlite3
-from scipy.sparse import csr_matrix
 import sympy
+import json
+import io
 
 # notes
 # https://statisticalhorizons.com/logistic-regression-for-rare-events
 # ~5 *events* per predictor
 # number of events is important ("effective sample size")
 
+TRAINING_FRACTION = 0.9
+THRESH = 0.0000001
+TRAINING_TIME = "2017-03-27"
+LATEST_RECORD = "2017-09-27"
+
+PARAM_NAMES = [
+    'avg_star',
+    'avg_push',
+    'avg_pr_created',
+    # 'avg_pr_reviewed',
+    # 'avg_pr_resolved',
+    # 'avg_fork',
+    'avg_release',
+    'avg_issue_created',
+    # 'avg_issue_commented',
+    # 'avg_issue_resolved',
+    # 'avg_org',
+    'avg_contrib',
+    'avg_contrib_1',
+    'avg_contrib_2',
+    # 'avg_contrib_3',
+    'delta_star',
+    'delta_push',
+    'delta_pr_created'
+    # 'delta_pr_reviewed',
+    # 'delta_pr_resolved',
+    # 'delta_fork',
+    # 'delta_release',
+    # 'delta_issue_created',
+    # 'delta_issue_commented',
+    # 'delta_issue_resolved',
+    # 'delta_org'
+]
+
 # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
-# TODO Below is dirty and probably not how things should be
 app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../../..")
 app_src_dir = os.path.realpath(app_home_dir + "/src")
 sys.path.insert(0, app_src_dir)
@@ -25,51 +59,89 @@ class LogisticModel(RegressionModel):
         super().__init__()
 
     def regression_on_repository(self, repository_record):
-        # TODO Implement this
-        pass
+        # t is a linear combination of the expanatory variables:
+        # t = w0 + x1 * w1 + x2 * w2 + ... + xn * wn
+        t = (linear_combination(repository_record, self.model))
+        return sigmoid(t) > 0.5
+
+    def set_weights(self, weights):
+        self.model = weights
 
     def serialize_to_file(self, path_to_model):
-        # TODO Implement this
-        pass
+        with io.open(path_to_model, 'w', encoding="utf8") as json_file:
+            json_file.write(json.dumps(self.model.tolist()))
 
     def deserialize_from_file(self, path_to_model):
-        # TODO Implement this
-        pass
+        with io.open(path_to_model, 'r', encoding="utf8") as json_file:
+            self.model = np.array(json.loads(json_file.readline()))
+
+def connect_with_cache(db_path, cache_path):
+    con = sqlite3.connect(db_path)
+    con.execute("ATTACH \"{}\" AS CACHE".format(cache_path))
+    return con
 
 class LogisticModeling(Modeling):
-    def __init__(self, preproc_dataset_path):
+    def __init__(self, preproc_dataset_path, cache_path):
         super().__init__(preproc_dataset_path)
-        # TODO This simply calls super constructor and might need (or not) updates
+        self.cache_path = cache_path
 
     def run_modeling(self, cross_validation_params):
-        # TODO Implement this
-        return LogisticModel()
+        print("Starting parameter building")
+        con = connect_with_cache(self.preproc_dataset_path, self.cache_path)
 
-THRESH = 0.0000001
-PARAM_NAMES = [
-    'avg_star',
-    'avg_push',
-    'avg_pr_created',
-    'avg_pr_reviewed',
-    'avg_pr_resolved',
-    'avg_fork',
-    'avg_release',
-    'avg_issue_created',
-    'avg_issue_commented',
-    'avg_issue_resolved',
-    'avg_org',
-    'delta_star',
-    'delta_push',
-    'delta_pr_created',
-    'delta_pr_reviewed',
-    # 'delta_pr_resolved',
-    # 'delta_fork',
-    # 'delta_release',
-    'delta_issue_created',
-    'delta_issue_commented',
-    'delta_issue_resolved',
-    'delta_org'
-]
+        con.execute("""
+            CREATE TEMP VIEW selection AS
+            SELECT repository.*
+            FROM repository JOIN repo on repositoryID = id
+            WHERE julianday(creation_date) <= julianday('{}') - 62
+        """.format('2017-03-27'))
+        data = np.array(gather_repo_data(con, TRAINING_TIME))
+        activities = np.array(judge_active(con, LATEST_RECORD))
+
+        # randomize both arrays while keeping the indices together
+        assert(len(data) == len(activities))
+        p = np.random.permutation(len(data))
+        data = data[p]
+        activities = activities[p]
+        if args.sample:
+            cutoff = math.ceil(len(data) * args.sample)
+            data = data[:cutoff]
+            activities = activities[:cutoff]
+
+        training_cutoff = math.ceil(len(data) * TRAINING_FRACTION)
+        x = data[:training_cutoff]
+        y = activities[:training_cutoff]
+        print("Done building parameters, starting modeling")
+        model = logistic_regression(x, y)
+        m = LogisticModel()
+        m.set_weights(model)
+        print("Done modeling, starting test")
+        x = np.array(data[training_cutoff:])
+        y = np.array(activities[training_cutoff:])
+        true_positive = 0
+        true_negative = 0
+        false_positive = 0
+        false_negative = 0
+        for (xi, yi) in zip(x, y):
+            predicted_event = m.regression_on_repository(xi)
+            if yi == 1:
+                if predicted_event:
+                    true_positive += 1
+                else:
+                    false_negative += 1
+            else:
+                if predicted_event:
+                    false_positive += 1
+                else:
+                    true_negative += 1
+        print("True positive:  {}".format(true_positive))
+        print("False positive: {}".format(false_positive))
+        print("True negative:  {}".format(true_negative))
+        print("False negative: {}".format(false_negative))
+        print("Total accuracy: {}%".format(0 if (true_positive + true_negative == 0) else round((true_positive + true_negative) / (true_positive + true_negative + false_positive + false_negative) * 100, 2)))
+        print("Event accuracy: {}%".format(0 if (true_positive == 0) else round(true_positive / (true_positive + false_negative) * 100, 2)))
+        print("Non-Event accuracy: {}%".format(0 if (true_negative == 0) else round(true_negative / (true_negative + false_positive) * 100, 2)))
+        return m
 
 # calculates the logistic function
 def sigmoid(t):
@@ -80,48 +152,6 @@ def linear_combination(x, a):
     for i in range(len(x)):
         t += x[i] * a[i + 1]
     return t
-
-def predict(x, weights):
-    # t is a linear combination of the expanatory variables:
-    # t = w0 + x1 * w1 + x2 * w2 + ... + xn * wn
-    t = (linear_combination(x, weights))
-    return sigmoid(t)
-
-# likelihood of the given observations occurring with given probabilities (binomial model, assumes independent)
-# this is the function that we (indirectly, through the log) want to maximize
-def likelihood(observations, probabilities):
-    l = 1
-    for (i, yi) in enumerate(observations):
-        if yi == 0:
-            l *= (1 - probabilities[i])
-        elif yi == 1:
-            l *= probabilities[i]
-        else:
-            raise("Observations have to be binary")
-    return l
-
-# odds = p / (1-p) (occuring/not_occuring)
-# odds of y = 1 given x (and the weights)
-# this equals e^logit(...)
-# this is *not* a probability, but ranges from 0 to +infty
-def odds(x, weights):
-    sympy.exp(linear_combination(x, weights))
-
-# inverse of logistic function
-def logit(t):
-    return math.log(t / (1 - t))
-
-# test the inverting (should return 3, with a bit of error)
-# print(logit(sigmoid(3)))
-
-# test on study example using wikipedias weights
-# for hours in range(1,6):
-#     print(round(predict([hours], [-4.0777, 1.5046]), 2))
-
-# x is input data, y in {0, 1} is data to predict, P is probability vector
-def log_likelihood_gradient(x, y, P):
-    a = y * x - P * x
-    return 42
 
 def probability(observations, weight):
     s = observations.shape
@@ -160,9 +190,6 @@ def logistic_regression(x, y):
 
     design_matrix = np.append(bias, x, 1)
     transposed_design = np.transpose(design_matrix)
-    # from scipy.sparse import csr_matrix
-    # design_matrix = csr_matrix(design_matrix)
-    # transposed_design = csr_matrix(transposed_design)
 
     change = np.ones(num_variables + 1)
 
@@ -183,22 +210,8 @@ def logistic_regression(x, y):
         print("Round {}".format(r))
         for (n, w) in zip(PARAM_NAMES, weight):
             print("{:28}{}".format(n, round(w, 2)))
-        # TODO calculatell
 
     return weight
-
-# x = np.transpose(np.array(range(1,11), ndmin=2))
-# y = np.array([0, 0, 0, 0, 1, 0, 1, 0, 1, 1])
-# model = logistic_regression(x, y)
-# print(predict(x, model))
-
-# x = np.array(
-#         [[0.5, 1], [0.75, 1], [1.0, 1], [1.25, 1], [1.5, 1], [1.75, 1], [2.0, 1], [2.25, 1], [2.5, 1], [2.75, 1], [3.0, 1], [3.25, 1], [4.0, 1], [4.25, 1], [4.5, 1], [4.75, 1], [5.0, 1], [5.5, 1]])
-# y = np.array(
-#     [0,   0,    0,   0,    0,   1,    0,   1,    0,   1,    0,   1,    1,   1,    1,   1,    1,   1])
-# model = logistic_regression(x, y)
-# print(model)
-# print(predict(x, model))
 
 # determines if a repo is active (dependent variable)
 def judge_active(con, current_time):
@@ -217,7 +230,7 @@ def judge_active(con, current_time):
     return [ x for (x,) in activities ]
 
 # gathers all independen variables
-def gather_repo_data(con, current_time):
+def gather_repo_data(con, current_time, id = None):
     # compute the average values
     avg_name = 'repo_averages_{}'.format(current_time)
     delta_name = 'repo_deltas_{}'.format(current_time)
@@ -278,32 +291,45 @@ def gather_repo_data(con, current_time):
             avg_star,
             avg_push,
             avg_pr_created,
-            avg_pr_reviewed,
-            avg_pr_resolved,
-            avg_fork,
             avg_release,
             avg_issue_created,
-            avg_issue_commented,
-            avg_issue_resolved,
-            avg_org
+            avg_contrib,
+            avg_contrib_1,
+            avg_contrib_2
         FROM \"{}\"
-        ORDER BY id
-    """.format(avg_name)).fetchall()
+        {}
+    """.format(avg_name, "ORDER BY id" if id is None else "WHERE id = {}".format(id))).fetchall()
     deltas = con.execute("""
         SELECT
             delta_star,
             delta_push,
-            delta_pr_created,
-            delta_pr_reviewed,
-            delta_issue_created,
-            delta_issue_commented,
-            delta_issue_resolved,
-            delta_org
+            delta_pr_created
         FROM \"{}\"
-        ORDER BY id
-    """.format(delta_name)).fetchall()
+        {}
+    """.format(delta_name, "ORDER BY id" if id is None else "WHERE id = {}".format(id))).fetchall()
     return np.append(averages, deltas, 1)
 
+def train(args):
+    modeling = LogisticModeling(args.dataset, args.cache)
+    model = modeling.run_modeling(None)
+    model.serialize_to_file(args.model)
+
+def predict(args):
+    model = LogisticModel()
+    model.deserialize_from_file(args.model)
+    result = model.regression_on_repository(json.loads(args.repo))
+    if result:
+        print("Prediction: This repository will be active in half a year.".format())
+    else:
+        print("Prediction: This repository will *not* be active in half a year.".format())
+
+def predict_by_id(args):
+    con = connect_with_cache(args.dataset, args.cache)
+    model = LogisticModel()
+    model.deserialize_from_file(args.model)
+    data = gather_repo_data(con, TRAINING_TIME, id = args.id)[0]
+    print("Predicting for repository: {}".format(data))
+    print("Prediction: {}".format(model.regression_on_repository(data)))
 
 if  __name__ == "__main__":
     import argparse
@@ -312,67 +338,25 @@ if  __name__ == "__main__":
     parser = argparse.ArgumentParser("Script for creating a logistic regression model of GitHub repositories.")
     parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
     parser.add_argument("-c", "--cache", help="Path to cache database.")
+    parser.add_argument("-m", "--model", help="Model file (json) to read or write -- always required!")
+    parser.add_argument("-p", "--predict", help="Predict the activity of a repository; takes in 11 numerical arguments and gives back 0 or 1")
+
+    subparsers = parser.add_subparsers()
+
+    # create the parser for the "train" command
+    parser_a = subparsers.add_parser('train', help='Train the model on a dataset and serialize it to file')
+    parser_a.add_argument("-s", "--sample", type=float, help="Use only sample% of the dataset")
+    parser_a.set_defaults(func=train)
+
+    # create the parser for the "predict" command
+    parser_b = subparsers.add_parser('predict', help='Predict the activity of a repository (based on a deserialized model)')
+    parser_b.add_argument('--repo', help='Record in format "[avg_star, avg_push, avg_pr_created, avg_release, avg_issue_created, contrib, contrib_1, contrib_2, delta_star, delta_push, delta_pr_created]"')
+    parser_b.set_defaults(func=predict)
+
+    # create the parser for the "predict_by_id" command
+    parser_c = subparsers.add_parser('predict_by_id', help='Predict the activity of a repository in the dataset, given by its id')
+    parser_c.add_argument('--id', type=int, help='Repository id')
+    parser_c.set_defaults(func=predict_by_id)
+
     args = parser.parse_args()
-
-    # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
-    # modeling = LogisticModeling(args.dataset)
-    # model = modeling.run_modeling("not_actual_cross_validation_params")
-    # model.serialize_to_file("not_an_anctual_path_to_file")
-
-    print("Starting parameter building")
-
-    con = sqlite3.connect(args.dataset)
-    con.execute("ATTACH \"{}\" AS CACHE".format(args.cache))
-    int_count = 0
-    total_count = 0
-
-
-    con.execute("""
-        CREATE TEMP VIEW selection AS
-        SELECT repository.*
-        FROM repository JOIN repo on repositoryID = id
-        WHERE julianday(creation_date) <= julianday('{}') - 62
-    """.format('2017-03-27'))
-    data = np.array(gather_repo_data(con, "2017-03-27"))
-    activities = np.array(judge_active(con, "2017-09-27"))
-
-    # randomize both arrays while keeping the indices together
-    assert(len(data) == len(activities))
-    p = np.random.permutation(len(data))
-    data = data[p]
-    activities = activities[p]
-
-    training_cutoff = math.ceil(len(data) * 0.9) # 90% train, rest test
-    x = data[:training_cutoff]
-    y = activities[:training_cutoff]
-    print("Done building parameters, starting modeling")
-    # import cProfile
-    # model = cProfile.run('logistic_regression(x, y)')
-    model = logistic_regression(x, y)
-    print(model)
-    print("Done modeling, starting test")
-    x = np.array(data[training_cutoff:])
-    y = np.array(activities[training_cutoff:])
-    true_positive = 0
-    true_negative = 0
-    false_positive = 0
-    false_negative = 0
-    for (xi, yi) in zip(x, y):
-        prediction = predict(xi, model)
-        if yi == 1:
-            if prediction == 1:
-                true_positive += 1
-            else:
-                false_negative += 1
-        else:
-            if prediction == 1:
-                false_positive += 1
-            else:
-                true_negative += 1
-    print("True positive:  {}".format(true_positive))
-    print("False positive: {}".format(false_positive))
-    print("True negative:  {}".format(true_negative))
-    print("False negative: {}".format(false_negative))
-    print("Total accuracy: {}%".format(0 if (true_positive + true_negative == 0) else round((true_positive + true_negative) / (true_positive + true_negative + false_positive + false_negative) * 100, 2)))
-    print("Event accuracy: {}%".format(0 if (true_positive == 0) else round(true_positive / (true_positive + false_negative) * 100, 2)))
-    print("Non-Event accuracy: {}%".format(0 if (true_negative == 0) else round(true_negative / (true_negative + false_positive) * 100, 2)))
+    args.func(args)
