@@ -14,9 +14,10 @@ import io
 
 TRAINING_FRACTION = 0.9
 THRESH = 0.0000001
-TRAINING_TIME = "2017-03-27"
+TRAINING_TIME = "2017-03-27" # while training, we pretend this is the current time
 LATEST_RECORD = "2017-09-27"
 
+# commented out were eliminated because of irrelevance
 PARAM_NAMES = [
     'avg_star',
     'avg_push',
@@ -58,10 +59,11 @@ class LogisticModel(RegressionModel):
     def __init__(self):
         super().__init__()
 
+    # predict the future activity of a repository
     def regression_on_repository(self, repository_record):
         # t is a linear combination of the expanatory variables:
         # t = w0 + x1 * w1 + x2 * w2 + ... + xn * wn
-        t = (linear_combination(repository_record, self.model))
+        t = linear_combination(repository_record, self.model)
         return sigmoid(t) > 0.5
 
     def set_weights(self, weights):
@@ -75,6 +77,7 @@ class LogisticModel(RegressionModel):
         with io.open(path_to_model, 'r', encoding="utf8") as json_file:
             self.model = np.array(json.loads(json_file.readline()))
 
+# connect to the database with the cache attached
 def connect_with_cache(db_path, cache_path):
     con = sqlite3.connect(db_path)
     con.execute("ATTACH \"{}\" AS CACHE".format(cache_path))
@@ -85,17 +88,22 @@ class LogisticModeling(Modeling):
         super().__init__(preproc_dataset_path)
         self.cache_path = cache_path
 
+    # create the model
     def run_modeling(self, cross_validation_params):
         print("Starting parameter building")
         con = connect_with_cache(self.preproc_dataset_path, self.cache_path)
 
+        # select the repositories to act on (at least two month old, so that deltas can be computed)
+        # this view will be used in gather_repo_data as well as judge_active
         con.execute("""
             CREATE TEMP VIEW selection AS
             SELECT repository.*
             FROM repository JOIN repo on repositoryID = id
             WHERE julianday(creation_date) <= julianday('{}') - 62
-        """.format('2017-03-27'))
+        """.format(TRAINING_TIME))
+        # get the independent variables
         data = np.array(gather_repo_data(con, TRAINING_TIME))
+        # get the dependent variable
         activities = np.array(judge_active(con, LATEST_RECORD))
 
         # randomize both arrays while keeping the indices together
@@ -103,21 +111,29 @@ class LogisticModeling(Modeling):
         p = np.random.permutation(len(data))
         data = data[p]
         activities = activities[p]
+
+        # take a sample of the dataset, if requested
         if args.sample:
             cutoff = math.ceil(len(data) * args.sample)
             data = data[:cutoff]
             activities = activities[:cutoff]
 
+        # use TRAINING_FRACTION for training, the rest for test
         training_cutoff = math.ceil(len(data) * TRAINING_FRACTION)
+
+        # train
         x = data[:training_cutoff]
         y = activities[:training_cutoff]
         print("Done building parameters, starting modeling")
         model = logistic_regression(x, y)
         m = LogisticModel()
         m.set_weights(model)
+
+        # test
         print("Done modeling, starting test")
         x = np.array(data[training_cutoff:])
         y = np.array(activities[training_cutoff:])
+        # build confusion matrix
         true_positive = 0
         true_negative = 0
         false_positive = 0
@@ -145,14 +161,17 @@ class LogisticModeling(Modeling):
 
 # calculates the logistic function
 def sigmoid(t):
+    # use symbolic calculations to deal with large numbers
     return 1 / (1 + sympy.exp(-t))
 
+# calculates a0 + a1 x1 + a2 x2 + ... + an xn
 def linear_combination(x, a):
     t = a[0] # intercept
     for i in range(len(x)):
         t += x[i] * a[i + 1]
     return t
 
+# calculates the probability of the given observations to occur, if the weights (and the probabilities they imply) are correct
 def probability(observations, weight):
     s = observations.shape
     num_observations = s[0]
@@ -167,10 +186,10 @@ def probability(observations, weight):
         P[i] = a / (1 + a)
     return P
 
+# generate matrix with P^2 on the diagonal
 def generateB(P):
-    import gc
+    # this matrix can be huge and has only values on the diagonal, so use a sparse matrix
     from scipy.sparse import diags
-    gc.collect()
     num_observations = np.shape(P)[0]
     B_diag = np.zeros(num_observations)
     for i in range(0, num_observations):
@@ -179,6 +198,7 @@ def generateB(P):
 
     return B
 
+# train the model
 def logistic_regression(x, y):
     s = np.shape(x)
     num_observations = s[0]
@@ -186,7 +206,7 @@ def logistic_regression(x, y):
     assert(np.shape(y) == (num_observations,))
 
     weight = np.zeros(num_variables + 1)
-    bias = np.ones((num_observations, 1))
+    bias = np.ones((num_observations, 1)) # for the intercept, has to be 1
 
     design_matrix = np.append(bias, x, 1)
     transposed_design = np.transpose(design_matrix)
@@ -199,11 +219,13 @@ def logistic_regression(x, y):
         r += 1
         P = probability(design_matrix, weight)
         B = generateB(P)
+        # determine in which direction we have to go (Newton)
         likelihood_gradient = transposed_design.dot(P - y)
         likelihood_hessian = transposed_design.dot(B.dot(design_matrix))
+        # approximate inverse even if no unique perfect solution exists
         hessian_inv_approx = np.linalg.lstsq(likelihood_hessian, np.eye(num_variables + 1, num_variables + 1))[0]
         change = - hessian_inv_approx.dot(likelihood_gradient)
-        weight = weight + change
+        weight += change
         diff = 0
         for val in change:
             diff += val ** 2
@@ -234,17 +256,18 @@ def gather_repo_data(con, current_time, id = None):
     # compute the average values
     avg_name = 'repo_averages_{}'.format(current_time)
     delta_name = 'repo_deltas_{}'.format(current_time)
+    # cache the results in a new sqlite database, because they take up the majority of the time
     con.execute("""
         CREATE TABLE IF NOT EXISTS CACHE.\"{}\" AS
         SELECT
             repositoryID as id,
             avg(star_count) as avg_star,
-            avg(total_contributor_count) as avg_contrib,
-            avg(contributor_type1_count) as avg_contrib_1,
-            avg(contributor_type2_count) as avg_contrib_2,
-            avg(contributor_type3_count) as avg_contrib_3,
-            avg(contributor_type4_count) as avg_contrib_4,
-            avg(contributor_type5_count) as avg_contrib_5,
+            0 as avg_contrib,
+            0 as avg_contrib_1,
+            0 as avg_contrib_2,
+            0 as avg_contrib_3,
+            0 as avg_contrib_4,
+            0 as avg_contrib_5,
             avg(code_push_count) as avg_push,
             avg(pull_request_created_count) as avg_pr_created,
             avg(pull_request_reviewed_count) as avg_pr_reviewed,
@@ -265,12 +288,12 @@ def gather_repo_data(con, current_time, id = None):
         SELECT
             new.repositoryID as id,
             avg(new.star_count - old.star_count) as delta_star,
-            avg(new.total_contributor_count - old.total_contributor_count) as delta_contrib,
-            avg(new.contributor_type1_count - old.contributor_type1_count) as delta_contrib_1,
-            avg(new.contributor_type2_count - old.contributor_type2_count) as delta_contrib_2,
-            avg(new.contributor_type3_count - old.contributor_type3_count) as delta_contrib_3,
-            avg(new.contributor_type4_count - old.contributor_type4_count) as delta_contrib_4,
-            avg(new.contributor_type5_count - old.contributor_type5_count) as delta_contrib_5,
+            0 as delta_contrib,
+            0 as delta_contrib_1,
+            0 as delta_contrib_2,
+            0 as delta_contrib_3,
+            0 as delta_contrib_4,
+            0 as delta_contrib_5,
             avg(new.code_push_count - old.code_push_count) as delta_push,
             avg(new.pull_request_created_count - old.pull_request_created_count) as delta_pr_created,
             avg(new.pull_request_reviewed_count - old.pull_request_reviewed_count) as delta_pr_reviewed,
@@ -286,6 +309,10 @@ def gather_repo_data(con, current_time, id = None):
           AND julianday(old.timestamp) BETWEEN julianday(?) - 62 AND julianday(?)
         GROUP BY new.repositoryID
             """.format(delta_name), (current_time, current_time))
+    # fill in contributor count
+    con.execute("UPDATE \"repo_averages_2017-03-27\" SET avg_contrib = ( SELECT count(*) FROM repo_contributors WHERE repo_id = \"repo_averages_2017-03-27\".id )")
+
+    # select the cached values
     averages = con.execute("""
         SELECT
             avg_star,
@@ -309,11 +336,13 @@ def gather_repo_data(con, current_time, id = None):
     """.format(delta_name, "ORDER BY id" if id is None else "WHERE id = {}".format(id))).fetchall()
     return np.append(averages, deltas, 1)
 
+# train the model
 def train(args):
     modeling = LogisticModeling(args.dataset, args.cache)
     model = modeling.run_modeling(None)
     model.serialize_to_file(args.model)
 
+# predict the future activitiy of a given repository record
 def predict(args):
     model = LogisticModel()
     model.deserialize_from_file(args.model)
@@ -323,6 +352,7 @@ def predict(args):
     else:
         print("Prediction: This repository will *not* be active in half a year.".format())
 
+# predict the future activitiy of repository given by its id
 def predict_by_id(args):
     con = connect_with_cache(args.dataset, args.cache)
     model = LogisticModel()

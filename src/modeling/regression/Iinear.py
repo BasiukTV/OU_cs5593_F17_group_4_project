@@ -61,38 +61,33 @@ class LinearModeling(Modeling):
 def rmsemet(actual, predicted):
     sumerror = 0.0
     sums = 0.0
-    logging.info("Calculating root mean squared error")
     for x in range(len(actual)):
         prd_error = predicted[x] - actual[x]
-        actuals = actual[x]
         sumerror += (prd_error ** 2)
-        sums += (actuals**2)
     mean_error = sumerror / float(len(actual))
-    mean_err = sums / float(len(actual))
-    return np.sqrt(mean_error), np.sqrt(mean_err)
+    return math.sqrt(mean_error)
 
-# Evaluate an algorithm using a train/test split
-def evaluate(x, y, algorithm, *args):
-    predicted = algorithm(x, y, *args)
-    actual = [y[-1] for row in y]
-    rmse = rmsemet(actual, predicted)
-    print(predicted)
+    #evaluates algorithm
+def evaluate(x, y, b0, b1):
+    predictions = []
+    for xi in x:
+        predictions += [ predict(xi, b0, b1) ]
+    
+    rmse = rmsemet(y, predictions)
     return rmse
 
-# calculates the logistic function
+# calculates the mean
 def mean(values):
-    print('type = ', type(values))
-    print('len = ', len(values))
     return sum((v) for v in values) / float(len(values))
 
-# Calculate covariance between x and y
+# Calculates covariance 
 def covariance(x, mean_x, y, mean_y):
     covar = 0.0
-    for i in range(len(x)):
-        covar += ((x[i]) - mean_x) * ((y[i]) - mean_y)
+    for j in range(len(x)):
+        covar += ((x[j]) - mean_x) * ((y[j]) - mean_y)
     return covar
 
-# Calculate the variance of a list of numbers
+# Calculate the variance
 def variance(values, mean):
     result = []
     for j in range(len(mean)):
@@ -105,25 +100,23 @@ def variance(values, mean):
     return result
     #return sum([(x-mean)**2 for x in values])
 
-# Calculate coefficients
-def coefficients(x):
+# regression algorithm
+def linear_regression(x, y):
     x_mean, y_mean = mean(x), mean(y)
     b1 = covariance(x, x_mean, y, y_mean) / variance(x, x_mean)
-    b0 = y_mean - b1 * x_mean
+    b1 = np.reshape(b1, (1, len(b1)))
+    b0 = y_mean - b1.dot(x_mean)
+    print("Average value", b0)
     print ("Coeffiecients ", b1)
     return (b0, b1)
 
-#regression algorithm
-def linear_regression(x, y, *args):
-    pred = list()
-    b0, b1 = coefficients(x)
-    for yi in y:
-        slope = b0 + b1 * yi
-        pred.append(slope)
-    print ("Predictions: ", pred[0])
-    return pred
+#prediction
+def predict(x, b0, b1):
+    prediction = b0 + b1.dot(np.transpose(x)) #points on the slope
+    return prediction
 
-# determines if a repo will be active in half a year (dependent variable)
+
+# determines if a repo will be successful in half a year (dependent variable)
 def future(con, current_time):
     succeed = 'repo_succeed_{}'.format(current_time)
     con.execute("""
@@ -138,7 +131,7 @@ def future(con, current_time):
     activities = con.execute('SELECT activities FROM \'{}\'ORDER BY id'.format(succeed)).fetchall()
     return [ x for (x,) in activities ]
 
-# gathers all independen variables
+# gathers all independent variables
 def ndata(con, current_time):
     # compute the average values
     avg_name = 'repo_averages_{}'.format(current_time)
@@ -241,17 +234,14 @@ if  __name__ == "__main__":
     y = np.array(success[:training_cutoff])
     print("Done building parameters, starting modeling")
    
-    model = linear_regression(x, y)
+    b0, b1 = linear_regression(x, y)
     
-    #print(model)
     print("Done modeling, starting test")
     
     x = np.array(data[training_cutoff:])
     y = np.array(success[training_cutoff:])
     
-    rsme = evaluate(x, y, linear_regression)
+    rsme = evaluate(x, y, b0, b1)
     print("RSME: ", (rsme))
-    #lr = LinearModeling(args.dataset)
-    #logging.info("Running the modeling..")
-    #lr.run_modeling({})
+
     
