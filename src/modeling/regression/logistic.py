@@ -352,14 +352,18 @@ def predict(args):
     else:
         print("Prediction: This repository will *not* be active in half a year.".format())
 
+def by_id(dataset, cache, model_file, id):
+    con = connect_with_cache(dataset, cache)
+    model = LogisticModel()
+    model.deserialize_from_file(model_file)
+    data = gather_repo_data(con, TRAINING_TIME, id = id)[0]
+    return (data, model.regression_on_repository(data))
+
 # predict the future activitiy of repository given by its id
 def predict_by_id(args):
-    con = connect_with_cache(args.dataset, args.cache)
-    model = LogisticModel()
-    model.deserialize_from_file(args.model)
-    data = gather_repo_data(con, TRAINING_TIME, id = args.id)[0]
+    (data, prediction) = by_id(args.dataset, args.cache, args.model, args.id)
     print("Predicting for repository: {}".format(data))
-    print("Prediction: {}".format(model.regression_on_repository(data)))
+    print("Prediction: {}".format(prediction))
 
 if  __name__ == "__main__":
     import argparse
