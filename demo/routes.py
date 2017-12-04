@@ -25,6 +25,9 @@ def preprocess():
 def cluster():
     form = ClusteringForm()
 
+    if request.args.get('cliArguments', '') and request.args.get('clusteringAlgorithms','') == "2":
+        return "I might do hierarchical clustering for you in future ..."
+
     if request.method == "GET":
         if form.validate() == False:
             return render_template('cluster.html', form=form)

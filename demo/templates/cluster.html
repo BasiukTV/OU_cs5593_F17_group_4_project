@@ -4,14 +4,21 @@
   <main class="container">
     <div class="section-content">
       <form method="GET" action="/cluster">
-        <div class="form-group">
-        {% for subfield in form.clusteringAlgorithms %}
-          <p/>
-          {{ subfield }} 
-          {{ subfield.label }} 
-        {% endfor %}          
+        <div>
+          {{ form.clusteringAlgorithms.label }}
         </div>
-        {{ form.submit(class="btn-cluster") }}
+        <div class="form-group">
+          {% for subfield in form.clusteringAlgorithms %}
+            <p/>
+            {{ subfield }} {{ subfield.label }}
+          {% endfor %}
+        </div>
+        <div>
+          {{ form.cliArguments.label }} {{ form.cliArguments(size=100) }}
+        </div>
+        <div>
+          {{ form.submit(class="btn-cluster") }}
+        </div>
       </form>
     </div>
   </main>
