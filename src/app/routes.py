@@ -1,5 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash
 from forms import PreprocessingForm, ClusteringForm, RegressionForm
+import os
+import sys
+
+# Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
+app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../..")
+app_src_dir = os.path.realpath(app_home_dir + "/src")
+sys.path.insert(0, app_src_dir)
 
 app = Flask(__name__)
 app.secret_key = "development-key"
@@ -30,11 +37,6 @@ def cluster():
         import argparse, os, sys
         from collections import namedtuple
 
-        # Below allows importing our application modules from anywhere under src/ directory where __init__.py file exists
-        app_home_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../..")
-        app_src_dir = os.path.realpath(app_home_dir + "/src")
-        sys.path.insert(0, app_src_dir)
-
         from modeling.clustering.hierarchical import HierarchicalModeling
 
         cli_args = request.args.get('cliArguments', '').split(' ')
@@ -62,9 +64,44 @@ def cluster():
     elif request.method == "GET":
         return render_template('cluster.html', form=form)
 
+MODEL_PATH = '../../output/model/logistic.json'
+
 @app.route("/regress", methods=["GET"])
 def regress():
     form = RegressionForm()
+
+    # print(request.args.get('regressionAlgorithms',''))
+    # print(request.args.get('repositoryID',''))
+    # Connect to running Hierarchical clustering
+    if len(request.args.get('repositoryID', '') or '') > 0 and request.args.get('regressionAlgorithms','') == "1":
+        from modeling.regression.logistic import by_id
+        id = int(request.args.get('repositoryID'))
+        (data, prediction) = by_id('../../input/data/repo-all.sqlite3', '../../input/data/repo-cache-all.sqlite3', MODEL_PATH, id)
+        flash("Prediction for id {} ({}):".format(id, data))
+        flash(str(prediction))
+        return render_template('regress.html', form=form)
+    elif request.args.get('avg_star', '') and request.args.get('regressionAlgorithms','') == "1":
+        from modeling.regression.logistic import LogisticModel
+        import json
+        data = [
+            float(request.args.get('avg_star')),
+            float(request.args.get('avg_push')),
+            float(request.args.get('avg_pr_created')),
+            float(request.args.get('avg_release')),
+            float(request.args.get('avg_issue_created')),
+            float(request.args.get('avg_contrib')),
+            float(request.args.get('avg_contrib_1')),
+            float(request.args.get('avg_contrib_2')),
+            float(request.args.get('delta_star')),
+            float(request.args.get('delta_push')),
+            float(request.args.get('delta_pr_created'))
+        ]
+        model = LogisticModel()
+        model.deserialize_from_file(MODEL_PATH)
+        prediction = model.regression_on_repository(data)
+        flash("Prediction for {}:".format(data))
+        flash(str(prediction))
+        return render_template('regress.html', form=form)
 
     if request.method == "GET":
         if form.validate() == False:

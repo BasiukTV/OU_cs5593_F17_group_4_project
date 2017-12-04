@@ -4,12 +4,61 @@
   <main class="container">
     <div class="section-content">
       <form method="GET" action="/regress">
+        <div>
+          {{ form.regressionAlgorithms.label }}
+        </div>
         <div class="form-group">
         {% for subfield in form.regressionAlgorithms %}
           <p/>
           {{ subfield }} 
           {{ subfield.label }} 
         {% endfor %}
+        <div>
+          {{ form.repositoryID.label }} {{ form.repositoryID(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_star.label }} {{ form.avg_star(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_push.label }} {{ form.avg_push(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_pr_created.label }} {{ form.avg_pr_created(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_release.label }} {{ form.avg_release(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_issue_created.label }} {{ form.avg_issue_created(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_contrib.label }} {{ form.avg_contrib(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_contrib_1.label }} {{ form.avg_contrib_1(size=100) }}
+        </div>
+        <div>
+          {{ form.avg_contrib_2.label }} {{ form.avg_contrib_2(size=100) }}
+        </div>
+        <div>
+          {{ form.delta_star.label }} {{ form.delta_star(size=100) }}
+        </div>
+        <div>
+          {{ form.delta_push.label }} {{ form.delta_push(size=100) }}
+        </div>
+        <div>
+          {{ form.delta_pr_created.label }} {{ form.delta_pr_created(size=100) }}
+        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+ 
+        {% for message in messages %}
+            <div class="alert alert-info">
+            {{ message[1] }}
+            </div>
+        {% endfor %}
+            {% endif %}
+        {% endwith %}
         </div>
         {{ form.submit(class="btn-regress") }}
       </form>
