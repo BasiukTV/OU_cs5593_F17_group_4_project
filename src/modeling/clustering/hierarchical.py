@@ -75,7 +75,7 @@ class HierarchicalModeling(Modeling):
     def __init__(self, preproc_dataset_path):
         super().__init__(preproc_dataset_path)
 
-    def run_modeling(self, cross_validation_params, output_clustering_db_path):
+    def run_modeling(self, cross_validation_params, weights, output_clustering_db_path):
         # TODO Cross Validation Parameters are strictly speaking only aply for supervised learning. We need to rename this.
 
         import random
@@ -105,7 +105,7 @@ class HierarchicalModeling(Modeling):
 
         # Sample (with no replacement, as it slows things down) contributors for the trial.
         trial_contributorIDs = random.sample(contributor_IDs, trial_size)
-        trial_weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        trial_weights = weights
         trial_avg_contributions = {}
 
         log("Trial #{} : Calculating contribution averages.".format(trial_num))
@@ -262,6 +262,7 @@ if  __name__ == "__main__":
     parser.add_argument("-d", "--dataset", required=True, help="Path to preprocessed dataset.")
     parser.add_argument("-ts", "--trial-size", type=int, required=True, help="Number of contributors to include in a trial. Hierarchical clustering uses O(n**2) of memory. This number cannot be very large.")
     parser.add_argument("-cdbp", "--clustering-db-path", help="Path to the output clustering db.")
+    parser.add_argument("-ws", "--weights", nargs='+', type=float, default=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], help="Array of weights to be aplied to contributor attributes for purposes of determining distances between them.")
     args = parser.parse_args()
 
     # We use simple named tuple so we don't have to define a class which will not be used anywhere else
@@ -269,5 +270,5 @@ if  __name__ == "__main__":
 
     # TODO Below Is simply a test of imports. Actualy implement the modeling invocation.
     modeling = HierarchicalModeling(args.dataset)
-    best_model = modeling.run_modeling(RuntimeParameters(args.trial_size), args.clustering_db_path)
+    best_model = modeling.run_modeling(RuntimeParameters(args.trial_size), args.weights, args.clustering_db_path)
     print("Best model is:\n{}".format(best_model))
