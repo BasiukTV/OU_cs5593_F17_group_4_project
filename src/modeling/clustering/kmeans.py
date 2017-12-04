@@ -11,9 +11,16 @@ sys.path.insert(0, app_src_dir)
 
 from modeling.modeling import Modeling
 
+''' return sse of a cluster '''
+def calculateSSE(cluster):
+    sse = 0.0    
+    for p in cluster.points:
+        sse += pow(getDistance(p[1:], cluster.centroid), 2)   
+    return sse
+
 def select_contributors(conn):
-    cur = conn.cursor()
-    cur.execute('select contributorID, sum(repos_started_count), sum(repos_forked_count), sum(code_pushed_count), sum(pull_request_created_count), sum(pull_request_reviewed_count), sum(issue_created_count), sum(issue_resolved_count), sum(issue_commented_count), sum(issue_other_activity_count), sum(owned_repos_starts_count) from contributor group by contributorID')
+    cur = conn.cursor()   
+    cur.execute('select contributorID, avg(repos_started_count), avg(repos_forked_count), avg(code_pushed_count), avg(pull_request_created_count), avg(pull_request_reviewed_count), avg(issue_created_count), avg(issue_resolved_count), avg(issue_commented_count), avg(issue_other_activity_count), avg(owned_repos_stars_count) from contributor group by contributorID')
 
     rows = cur.fetchall()
 
@@ -21,6 +28,7 @@ def select_contributors(conn):
     for row in rows:
        contributors_data.append(list(row))
 
+    print("Contributor data feched ===>", len(contributors_data))
     return contributors_data
 
 def getContributorsData(db_file):
@@ -42,40 +50,53 @@ def update_user_cluster(conn, cluster, contributor_ids):
     cur = conn.cursor()
     
     for cid in contributor_ids:
-        cur.execute('''update user set cluster = %d where id = %d''' %(cluster, cid))        
+        cur.execute('''update contributor_cluster set cluster = %s where contrib_id = %s''' %(cluster, cid))  
 
-    #formatted_qry = '''update user set cluster = ? where id in ({})'''.format(','.join('?' * len(contributor_ids)))
-    #print('formated qry = ', formatted_qry)
-    #cur.execute(formatted_qry, (cluster, contributor_ids))
+def normalize_data(data_list):
+    import numpy as np
+    from sklearn import preprocessing
+
+    data = np.array(data_list)
+    d = preprocessing.scale(data[:, [1,2,3,4,5,6,7,8,9,10]], axis = 0)
+    
+    return np.concatenate((data[:,[0]], d), axis=1).tolist()
 
 class KMeansModeling(Modeling):
 
-    def __init__(self, preproc_dataset_path, k):
+    def __init__(self, preproc_dataset_path, k, output_path):
         super().__init__(preproc_dataset_path)
-        self.k = k
         
-        # stop updating centroids when their differences is less than 0.005
-        self.diff = 0.0049
-       
-        db_file = '../../../samples/data/preproc/sample.sqlite3'
+        # stop updating centroids when their differences is less than 0.0000005
+        self.diff = 0.00000049    
 
         # get contributors data from database
-        self.data_list = getContributorsData(db_file)       
+        data_list = getContributorsData(preproc_dataset_path) 
+
+        self.data_list = normalize_data(data_list)
 
         self.centroids = []
-        clusters = do_kmeans(self.data_list, self.k, self.diff)          
-        
-        conn = create_db_connection(db_file)
 
+        clusters = do_kmeans(self.data_list, k, self.diff)          
+        
+        conn = create_db_connection(output_path)
+
+        total_sse = 0.0 
+        print('K = %s' %(len(clusters)))
+        print('-------------------------------')
         for i in range(len(clusters)):
             with conn:
                 update_user_cluster(conn, i+1, [p[0] for p in clusters[i].points])
-                #print('#### Cluster %s ########' %i)
-                #print(clusters[i].points)  
-                #print('###########################################################')                
+                sse = calculateSSE(clusters[i])                 
+                total_sse += sse   
+                print('Cluster %s has %s points.' %(i+1, len(clusters[i].points)))
+                print('Centroid = %s' %(clusters[i].centroid))
+                print('===========================================================')              
+
+        print("Total SSE =", total_sse)
+        print('###########################################################')         
 
     def run_modeling(self, cross_validation_params):
-        # TODO Implement this        
+        # Implement cross validation       
         pass
 
 def do_kmeans(points, k, diff):
@@ -173,9 +194,10 @@ if  __name__ == "__main__":
     parser = argparse.ArgumentParser("Script for creating a kmeans clustering model of GitHub contributors.")
     parser.add_argument("-d", "--dataset", help="Path to preprocessed dataset.")
     parser.add_argument("-k", "--clusters", type=int, help="Chosen k clusters.")
-    args = parser.parse_args()
-   
+    parser.add_argument("-o", "--output", help="Path to clustered data.")
+    args = parser.parse_args()  
+    
     # invoke k-means algorithm
-    KMeansModeling(args.dataset, args.clusters)
-    #model = modeling.run_modeling("not_actual_cross_validation_params")
+    KMeansModeling(args.dataset, args.clusters, args.output)
+
     pass
