@@ -46,11 +46,18 @@ def create_db_connection(db_file):
 
     return None
 
-def update_user_cluster(conn, cluster, contributor_ids):
-    cur = conn.cursor()
+def insert_user_cluster(conn, cluster, contributor_ids):
+    create_table(conn)
+
+    cur = conn.cursor()    
     
     for cid in contributor_ids:
-        cur.execute('''update contributor_cluster set cluster = %s where contrib_id = %s''' %(cluster, cid))  
+        cur.execute('''insert into contributor_cluster values (?, ?)''', (cid, cluster))        
+
+def create_table(conn):
+    cur = conn.cursor()
+    cur.execute('''drop table if exists contributor_cluster''')
+    cur.execute('''create table contributor_cluster (contrib_id integer, cluster integer, primary key (contrib_id))''')
 
 def normalize_data(data_list):
     import numpy as np
@@ -85,7 +92,7 @@ class KMeansModeling(Modeling):
         print('-------------------------------')
         for i in range(len(clusters)):
             with conn:
-                update_user_cluster(conn, i+1, [p[0] for p in clusters[i].points])
+                insert_user_cluster(conn, i+1, [p[0] for p in clusters[i].points])
                 sse = calculateSSE(clusters[i])                 
                 total_sse += sse   
                 print('Cluster %s has %s points.' %(i+1, len(clusters[i].points)))
